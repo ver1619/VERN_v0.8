@@ -2,8 +2,9 @@ package memtable
 
 import (
 	"sort"
+	"sync"
 
-	"vern_kv0.5/internal"
+	"vern_kv0.8/internal"
 )
 
 //
@@ -28,6 +29,7 @@ type entry struct {
 // - Insert-only (no mutation, no deletion)
 // - Tombstones are stored as values (interpreted later)
 type Memtable struct {
+	mu      sync.RWMutex
 	cmp     internal.Comparator
 	entries []entry
 }
@@ -60,6 +62,9 @@ func New() *Memtable {
 //
 // Ordering is preserved using binary search.
 func (m *Memtable) Insert(key []byte, value []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Find insertion point
 	i := sort.Search(len(m.entries), func(i int) bool {
 		return m.cmp.Compare(m.entries[i].key, key) >= 0
@@ -82,12 +87,16 @@ func (m *Memtable) Insert(key []byte, value []byte) {
 
 // Size returns the number of entries in the memtable.
 func (m *Memtable) Size() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return len(m.entries)
 }
 
 // Entry returns the i-th entry in sorted order.
 // Caller MUST ensure: 0 <= i < Size().
 func (m *Memtable) Entry(i int) Entry {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	e := m.entries[i]
 	return Entry{
 		Key:   e.key,

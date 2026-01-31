@@ -1,44 +1,36 @@
 package sstable
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
-	"hash/crc32"
-	"io"
 	"os"
 )
 
-var errCorruptSSTable = errors.New("corrupt sstable")
+var (
+	ErrCorruptSSTable = errors.New("corrupt sstable")
+	ErrBlockCorrupt   = errors.New("corrupt block")
+)
 
-// Record represents one SSTable entry.
-type Record struct {
-	Key   []byte
-	Value []byte
+const (
+	// MagicNumber is a unique identifier for VernKV SSTables.
+	// "VERN" + v0.8
+	MagicNumber uint64 = 0x5645524E_00000008
+
+	// FooterSize is the fixed size of the footer encoded at the end of the file.
+	// MetaindexHandle (Offset 8 + Length 8) + IndexHandle (Offset 8 + Length 8) + MagicNumber (8)
+	FooterSize = 16 + 16 + 8
+)
+
+// BlockHandle contains the position and size of a block.
+type BlockHandle struct {
+	Offset uint64
+	Length uint64
 }
 
-// WriteRecord is used ONLY for tests.
-func WriteRecord(w io.Writer, key, value []byte) error {
-	var payload bytes.Buffer
-
-	binary.Write(&payload, binary.LittleEndian, uint32(len(key)))
-	binary.Write(&payload, binary.LittleEndian, uint32(len(value)))
-	payload.Write(key)
-	payload.Write(value)
-
-	length := uint32(payload.Len())
-
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, uint32(0)) // CRC placeholder
-	binary.Write(&buf, binary.LittleEndian, length)
-	buf.Write(payload.Bytes())
-
-	raw := buf.Bytes()
-	crc := crc32.ChecksumIEEE(raw[4:])
-	binary.LittleEndian.PutUint32(raw[0:], crc)
-
-	_, err := w.Write(raw)
-	return err
+// EncodeTo encodes the BlockHandle to a byte slice.
+func (h BlockHandle) EncodeTo(dst []byte) {
+	binary.LittleEndian.PutUint64(dst[0:], h.Offset)
+	binary.LittleEndian.PutUint64(dst[8:], h.Length)
 }
 
 // Open opens an SSTable for reading.
@@ -46,36 +38,41 @@ func Open(path string) (*os.File, error) {
 	return os.Open(path)
 }
 
-// ReadRecord reads one record at offset.
-func ReadRecord(data []byte, offset int) (Record, int, error) {
-	if offset+8 > len(data) {
-		return Record{}, 0, io.EOF
+// DecodeBlockHandle decodes a BlockHandle from a byte slice.
+func DecodeBlockHandle(src []byte) BlockHandle {
+	return BlockHandle{
+		Offset: binary.LittleEndian.Uint64(src[0:]),
+		Length: binary.LittleEndian.Uint64(src[8:]),
+	}
+}
+
+// Footer is the fixed-size footer at the end of every SSTable.
+type Footer struct {
+	MetaindexHandle BlockHandle
+	IndexHandle     BlockHandle
+}
+
+// EncodeTo encodes the Footer to a byte slice.
+// EncodeTo encodes the Footer to a byte slice.
+func (f Footer) EncodeTo(dst []byte) {
+	f.MetaindexHandle.EncodeTo(dst[0:])
+	f.IndexHandle.EncodeTo(dst[16:])
+	binary.LittleEndian.PutUint64(dst[32:], MagicNumber)
+}
+
+// DecodeFooter decodes the Footer from a byte slice.
+func DecodeFooter(src []byte) (Footer, error) {
+	if len(src) < FooterSize {
+		return Footer{}, ErrCorruptSSTable
 	}
 
-	wantCRC := binary.LittleEndian.Uint32(data[offset:])
-	length := binary.LittleEndian.Uint32(data[offset+4:])
-
-	total := int(8 + length)
-	if offset+total > len(data) {
-		return Record{}, 0, errCorruptSSTable
+	magic := binary.LittleEndian.Uint64(src[32:])
+	if magic != MagicNumber {
+		return Footer{}, ErrCorruptSSTable
 	}
 
-	if crc32.ChecksumIEEE(data[offset+4:offset+total]) != wantCRC {
-		return Record{}, 0, errCorruptSSTable
-	}
-
-	payload := data[offset+8 : offset+total]
-	rd := bytes.NewReader(payload)
-
-	var klen, vlen uint32
-	binary.Read(rd, binary.LittleEndian, &klen)
-	binary.Read(rd, binary.LittleEndian, &vlen)
-
-	key := make([]byte, klen)
-	value := make([]byte, vlen)
-
-	rd.Read(key)
-	rd.Read(value)
-
-	return Record{Key: key, Value: value}, total, nil
+	return Footer{
+		MetaindexHandle: DecodeBlockHandle(src[0:]),
+		IndexHandle:     DecodeBlockHandle(src[16:]),
+	}, nil
 }

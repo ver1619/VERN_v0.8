@@ -1,8 +1,12 @@
 package engine
 
 import (
+	"bytes"
 	"errors"
+	"sort"
 )
+
+const NumLevels = 7
 
 // SSTableMeta represents metadata for one SSTable.
 type SSTableMeta struct {
@@ -16,7 +20,11 @@ type SSTableMeta struct {
 
 // VersionSet is the in-memory representation of manifest state.
 type VersionSet struct {
-	Tables       map[uint64]SSTableMeta
+	// Levels holds the tables for each level.
+	// L0 is unsorted (sorted by recency/seq inside file, but files overlap).
+	// L1+ is sorted by key and non-overlapping.
+	Levels [NumLevels][]SSTableMeta
+
 	Obsolete     map[uint64]bool
 	WALCutoffSeq uint64
 }
@@ -24,24 +32,46 @@ type VersionSet struct {
 // NewVersionSet creates an empty VersionSet.
 func NewVersionSet() *VersionSet {
 	return &VersionSet{
-		Tables:   make(map[uint64]SSTableMeta),
+		Levels:   [NumLevels][]SSTableMeta{},
 		Obsolete: make(map[uint64]bool),
 	}
 }
 
 // AddTable adds a new SSTable to the version set.
 func (v *VersionSet) AddTable(meta SSTableMeta) error {
-	if _, exists := v.Tables[meta.FileNum]; exists {
-		return errors.New("sstable already exists in versionset")
+	if meta.Level >= NumLevels {
+		return errors.New("invalid level")
 	}
-	v.Tables[meta.FileNum] = meta
+
+	v.Levels[meta.Level] = append(v.Levels[meta.Level], meta)
+
+	// For L1+, we should keep them sorted by key
+	if meta.Level > 0 {
+		sort.Slice(v.Levels[meta.Level], func(i, j int) bool {
+			return bytes.Compare(v.Levels[meta.Level][i].SmallestKey, v.Levels[meta.Level][j].SmallestKey) < 0
+		})
+	}
+	// For L0, we usually sort by FileNum (recency) implicitly if we append,
+	// but strictly L0 is unordered bunch of overlapping files.
+
 	return nil
 }
 
-// RemoveTable marks an SSTable as obsolete.
+// RemoveTable marks an SSTable as obsolete and removes it from levels.
 func (v *VersionSet) RemoveTable(fileNum uint64) {
-	delete(v.Tables, fileNum)
 	v.Obsolete[fileNum] = true
+
+	// Find and remove
+	for l := 0; l < NumLevels; l++ {
+		files := v.Levels[l]
+		for i, t := range files {
+			if t.FileNum == fileNum {
+				// Remove
+				v.Levels[l] = append(files[:i], files[i+1:]...)
+				return
+			}
+		}
+	}
 }
 
 // SetWALCutoff sets the WAL cutoff sequence.
@@ -49,4 +79,31 @@ func (v *VersionSet) SetWALCutoff(seq uint64) {
 	if seq > v.WALCutoffSeq {
 		v.WALCutoffSeq = seq
 	}
+}
+
+// GetAllTables returns a flattened list of all tables (useful for recovery/scanning).
+func (v *VersionSet) GetAllTables() []SSTableMeta {
+	var all []SSTableMeta
+	for _, files := range v.Levels {
+		all = append(all, files...)
+	}
+	return all
+}
+
+// PickCompactionSimple is a placeholder for compaction picking logic.
+// Returns level to compact and boolean indicating if compaction is needed.
+func (v *VersionSet) PickCompactionSimple() (int, bool) {
+	// L0 -> L1 triggers if L0 has > 4 files
+	if len(v.Levels[0]) > 4 {
+		return 0, true
+	}
+
+	// Check L1+ sizes (simplified count threshold for now)
+	for l := 1; l < NumLevels-1; l++ {
+		if len(v.Levels[l]) > 10 { // Placeholder threshold
+			return l, true
+		}
+	}
+
+	return -1, false
 }

@@ -1,0 +1,59 @@
+package engine
+
+import "bytes"
+
+// scanIterator filters an underlying iterator
+// based on user-key range or prefix.
+type scanIterator struct {
+	inner  Iterator
+	start  []byte
+	end    []byte
+	prefix []byte
+}
+
+func (it *scanIterator) SeekToFirst() {
+	it.inner.SeekToFirst()
+	it.advance()
+}
+
+func (it *scanIterator) Next() {
+	it.inner.Next()
+	it.advance()
+}
+
+func (it *scanIterator) Valid() bool {
+	return it.inner.Valid()
+}
+
+func (it *scanIterator) Key() []byte {
+	return it.inner.Key()
+}
+
+func (it *scanIterator) Value() []byte {
+	return it.inner.Value()
+}
+
+func (it *scanIterator) advance() {
+	for it.inner.Valid() {
+		k := it.inner.Key()
+
+		if it.prefix != nil {
+			if !bytes.HasPrefix(k, it.prefix) {
+				it.inner.Next()
+				continue
+			}
+		}
+
+		if it.start != nil && bytes.Compare(k, it.start) < 0 {
+			it.inner.Next()
+			continue
+		}
+
+		if it.end != nil && bytes.Compare(k, it.end) >= 0 {
+			// end bound reached — stop iteration
+			return
+		}
+
+		return
+	}
+}

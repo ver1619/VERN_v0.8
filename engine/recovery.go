@@ -4,16 +4,17 @@ import (
 	"os"
 	"sort"
 
-	"vern_kv0.5/internal"
-	"vern_kv0.5/memtable"
-	"vern_kv0.5/wal"
+	"vern_kv0.8/internal"
+	"vern_kv0.8/memtable"
+	"vern_kv0.8/wal"
 )
 
 // RecoveredState is the result of crash recovery.
 type RecoveredState struct {
-	VersionSet *VersionSet
-	Memtable   *memtable.Memtable
-	NextSeq    uint64
+	VersionSet  *VersionSet
+	Memtable    *memtable.Memtable
+	NextSeq     uint64
+	NextFileNum uint64
 }
 
 // Recover performs full crash recovery.
@@ -27,11 +28,16 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 	// Initialize memtable
 	mt := memtable.New()
 
-	// Determine highest durable sequence number
+	// Determine highest durable sequence number and file number
 	var maxSeq uint64
-	for _, meta := range vs.Tables {
+	var maxFileNum uint64
+
+	for _, meta := range vs.GetAllTables() {
 		if meta.LargestSeq > maxSeq {
 			maxSeq = meta.LargestSeq
+		}
+		if meta.FileNum > maxFileNum {
+			maxFileNum = meta.FileNum
 		}
 	}
 	if vs.WALCutoffSeq > maxSeq {
@@ -98,9 +104,10 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 	}
 
 	return &RecoveredState{
-		VersionSet: vs,
-		Memtable:   mt,
-		NextSeq:    maxSeq + 1,
+		VersionSet:  vs,
+		Memtable:    mt,
+		NextSeq:     maxSeq + 1,
+		NextFileNum: maxFileNum,
 	}, nil
 }
 

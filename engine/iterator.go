@@ -1,0 +1,41 @@
+package engine
+
+import (
+	"vern_kv0.8/internal"
+	"vern_kv0.8/iterators"
+)
+
+// Iterator is a snapshot-consistent user-facing iterator.
+type Iterator interface {
+	SeekToFirst()
+	Next()
+	Valid() bool
+	Key() []byte
+	Value() []byte
+}
+
+type dbIterator struct {
+	inner iterators.InternalIterator
+}
+
+func (it *dbIterator) SeekToFirst() {
+	it.inner.SeekToFirst()
+}
+
+func (it *dbIterator) Next() {
+	it.inner.Next()
+}
+
+func (it *dbIterator) Valid() bool {
+	return it.inner.Valid()
+}
+
+// Key returns the USER KEY (not InternalKey).
+func (it *dbIterator) Key() []byte {
+	return internal.ExtractUserKey(it.inner.Key())
+}
+
+// Value returns the associated value.
+func (it *dbIterator) Value() []byte {
+	return it.inner.Value()
+}

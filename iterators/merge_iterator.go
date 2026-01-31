@@ -3,7 +3,7 @@ package iterators
 import (
 	"bytes"
 
-	"vern_kv0.5/internal"
+	"vern_kv0.8/internal"
 )
 
 // MergeIterator merges multiple sorted InternalIterators into one.

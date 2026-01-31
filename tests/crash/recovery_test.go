@@ -3,7 +3,7 @@ package crash
 import (
 	"testing"
 
-	"vern_kv0.5/engine"
+	"vern_kv0.8/engine"
 )
 
 func TestRecoveryIsDeterministic(t *testing.T) {

@@ -3,7 +3,7 @@ package memtable
 import (
 	"testing"
 
-	"vern_kv0.5/internal"
+	"vern_kv0.8/internal"
 )
 
 func TestMemtableInsertAndSize(t *testing.T) {

@@ -1,6 +1,6 @@
 package iterators
 
-import "vern_kv0.5/memtable"
+import "vern_kv0.8/memtable"
 
 // MemtableIterator iterates over a memtable in sorted order.
 type MemtableIterator struct {

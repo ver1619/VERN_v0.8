@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"vern_kv0.5/manifest"
+	"vern_kv0.8/manifest"
 )
 
 func TestVersionSetReplay(t *testing.T) {
@@ -48,7 +48,7 @@ func TestVersionSetReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(vs.Tables) != 0 {
+	if len(vs.GetAllTables()) != 0 {
 		t.Fatalf("expected no active tables")
 	}
 	if !vs.Obsolete[1] {

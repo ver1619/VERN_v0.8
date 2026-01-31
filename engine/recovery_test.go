@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"vern_kv0.5/manifest"
-	"vern_kv0.5/wal"
+	"vern_kv0.8/manifest"
+	"vern_kv0.8/wal"
 )
 
 func TestFullRecovery(t *testing.T) {

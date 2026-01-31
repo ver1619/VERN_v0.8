@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"vern_kv0.5/manifest"
+	"vern_kv0.8/manifest"
 )
 
 // bootstrapIfNeeded initializes a fresh database if needed.

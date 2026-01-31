@@ -3,7 +3,7 @@ package determinism
 import (
 	"testing"
 
-	"vern_kv0.5/engine"
+	"vern_kv0.8/engine"
 )
 
 func TestReplayRepeatability(t *testing.T) {

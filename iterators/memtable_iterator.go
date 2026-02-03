@@ -2,7 +2,7 @@ package iterators
 
 import "vern_kv0.8/memtable"
 
-// MemtableIterator iterates over a memtable in sorted order.
+// MemtableIterator iterates over an in-memory memtable.
 type MemtableIterator struct {
 	mt    *memtable.Memtable
 	index int

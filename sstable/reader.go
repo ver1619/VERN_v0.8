@@ -33,11 +33,7 @@ func NewReader(path string) (*Reader, error) {
 	}
 
 	if err := r.loadFilter(); err != nil {
-		// If filter loading fails, just ignore it?
-		// For robustness, maybe log but proceed.
-		// For now, let's just proceed without filter if error, or fail?
-		// LevelDB ignores errors here.
-		// We'll proceed with nil filterData.
+		// Filter errors are non-fatal (proceed without filter).
 	}
 
 	return r, nil

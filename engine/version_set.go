@@ -21,7 +21,7 @@ type SSTableMeta struct {
 // VersionSet is the in-memory representation of manifest state.
 type VersionSet struct {
 	// Levels holds the tables for each level.
-	// L0 is unsorted (sorted by recency/seq inside file, but files overlap).
+	// L0 is unsorted (overlapping files).
 	// L1+ is sorted by key and non-overlapping.
 	Levels [NumLevels][]SSTableMeta
 
@@ -51,8 +51,7 @@ func (v *VersionSet) AddTable(meta SSTableMeta) error {
 			return bytes.Compare(v.Levels[meta.Level][i].SmallestKey, v.Levels[meta.Level][j].SmallestKey) < 0
 		})
 	}
-	// For L0, we usually sort by FileNum (recency) implicitly if we append,
-	// but strictly L0 is unordered bunch of overlapping files.
+	// L0: overlapping files, naturally ordered by append sequence.
 
 	return nil
 }
@@ -93,17 +92,31 @@ func (v *VersionSet) GetAllTables() []SSTableMeta {
 // PickCompactionSimple is a placeholder for compaction picking logic.
 // Returns level to compact and boolean indicating if compaction is needed.
 func (v *VersionSet) PickCompactionSimple() (int, bool) {
-	// L0 -> L1 triggers if L0 has > 4 files
-	if len(v.Levels[0]) > 4 {
+	// L0 -> L1 triggers if L0 has >= 4 files
+	if len(v.Levels[0]) >= 4 {
 		return 0, true
 	}
 
 	// Check L1+ sizes (simplified count threshold for now)
 	for l := 1; l < NumLevels-1; l++ {
-		if len(v.Levels[l]) > 10 { // Placeholder threshold
+		if len(v.Levels[l]) > 10 {
 			return l, true
 		}
 	}
 
 	return -1, false
+}
+
+// GetOverlappingInputs returns all tables in the specified level that overlap with [start, end].
+func (v *VersionSet) GetOverlappingInputs(level int, start, end []byte) []SSTableMeta {
+	var inputs []SSTableMeta
+	for _, t := range v.Levels[level] {
+		// Intersection check: ! (t.Largest < start || t.Smallest > end)
+		// But bytes.Compare needed
+		if bytes.Compare(t.LargestKey, start) < 0 || bytes.Compare(t.SmallestKey, end) > 0 {
+			continue // No overlap
+		}
+		inputs = append(inputs, t)
+	}
+	return inputs
 }

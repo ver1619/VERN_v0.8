@@ -12,16 +12,14 @@ var (
 )
 
 const (
-	// MagicNumber is a unique identifier for VernKV SSTables.
-	// "VERN" + v0.8
+	// MagicNumber identifies VernKV SSTables. ("VERN" + v0.8)
 	MagicNumber uint64 = 0x5645524E_00000008
 
-	// FooterSize is the fixed size of the footer encoded at the end of the file.
-	// MetaindexHandle (Offset 8 + Length 8) + IndexHandle (Offset 8 + Length 8) + MagicNumber (8)
+	// FooterSize is fixed. (MetaindexHandle + IndexHandle + MagicNumber)
 	FooterSize = 16 + 16 + 8
 )
 
-// BlockHandle contains the position and size of a block.
+// BlockHandle points to a block (offset + length).
 type BlockHandle struct {
 	Offset uint64
 	Length uint64
@@ -46,7 +44,7 @@ func DecodeBlockHandle(src []byte) BlockHandle {
 	}
 }
 
-// Footer is the fixed-size footer at the end of every SSTable.
+// Footer sits at the end of the SSTable.
 type Footer struct {
 	MetaindexHandle BlockHandle
 	IndexHandle     BlockHandle

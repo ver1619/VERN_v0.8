@@ -10,7 +10,7 @@ var (
 	errSegmentClosed = errors.New("wal segment closed")
 )
 
-// Segment represents a single WAL segment file.
+// WAL manages a sequence of log files (segments). file.
 type Segment struct {
 	mu     sync.Mutex
 	file   *os.File
@@ -44,8 +44,7 @@ func OpenSegment(path string) (*Segment, error) {
 	}, nil
 }
 
-// Append appends a full WAL record to the segment.
-// The record must already be fully encoded.
+// Append writes a full record to the segment.
 func (s *Segment) Append(record []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -82,8 +81,8 @@ func (s *Segment) Size() int64 {
 	return s.size
 }
 
-// Close fsyncs and closes the segment.
-// After Close, no further appends are allowed.
+// Close flushes and closes the file.
+// No more writes allowed after this.
 func (s *Segment) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -2,10 +2,10 @@ package internal
 
 import "bytes"
 
-// Comparator defines ordering over InternalKeys.
 type Comparator struct{}
 
-// Compare compares two encoded InternalKeys.
+// InternalKeyComparator sorts InternalKeys.
+// Order: Key Ascending, Sequence Descending.
 // Returns: -1 if a < b, 0 if a == b, +1 if a > b
 func (Comparator) Compare(a, b []byte) int {
 	// 1. Compare user keys

@@ -9,7 +9,7 @@ import (
 	"vern_kv0.8/wal"
 )
 
-// RecoveredState is the result of crash recovery.
+// RecoveredState contains restored DB state.
 type RecoveredState struct {
 	VersionSet  *VersionSet
 	Memtable    *memtable.Memtable

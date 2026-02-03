@@ -8,6 +8,7 @@ import (
 	"vern_kv0.8/wal"
 )
 
+// TestIntegrationBasic verifies Puts, Batch writes, Deletes, and Recovery.
 func TestIntegrationBasic(t *testing.T) {
 	dir := t.TempDir()
 	db, err := engine.Open(dir)
@@ -57,6 +58,7 @@ func TestIntegrationBasic(t *testing.T) {
 	}
 }
 
+// TestIntegrationCompactionSpaceReclamation is a placeholder for checking GC.
 func TestIntegrationCompactionSpaceReclamation(t *testing.T) {
 	dir := t.TempDir()
 	db, err := engine.Open(dir)

@@ -13,20 +13,15 @@ const (
 	RecordTypeTombstone RecordType = 0x02
 )
 
-// InternalKey is the byte-level key stored in memtables and SSTables.
-// Layout : [ user key bytes | 8-byte trailer ]
-// Trailer (uint64, little-endian):
-// Bit Layout: [ 56 bits | 8 bits ]
-//
-//	high 56 bits : sequence number
-//	low  8 bits  : record type
+// InternalKey combines UserKey and SequenceNumber/Type.
+// Layout: [ UserKey | Seq (7 bytes) | Type (1 byte) ]
 type InternalKey struct {
 	UserKey []byte
 	Seq     uint64
 	Type    RecordType
 }
 
-// EncodeInternalKey encodes an InternalKey into its on-disk/in-memory form.
+// EncodeInternalKey packs userKey, seq, and type.
 func EncodeInternalKey(userKey []byte, seq uint64, typ RecordType) []byte {
 	if seq>>56 != 0 {
 		panic("sequence number exceeds 56 bits")
@@ -66,7 +61,7 @@ func DecodeInternalKey(b []byte) (InternalKey, error) {
 	}, nil
 }
 
-// ExtractUserKey returns the user key portion.
+// ExtractUserKey splits the user key from the trailer.
 func ExtractUserKey(b []byte) []byte {
 	if len(b) < 8 {
 		return nil
@@ -74,7 +69,7 @@ func ExtractUserKey(b []byte) []byte {
 	return b[:len(b)-8]
 }
 
-// ExtractTrailer returns (sequence, type) without allocation.
+// ExtractTrailer parses sequence and type.
 func ExtractTrailer(b []byte) (uint64, RecordType, error) {
 	if len(b) < 8 {
 		return 0, 0, errors.New("invalid internal key")

@@ -24,7 +24,6 @@ func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta,
 
 	var smallest, largest []byte
 	var count uint64
-	// var smallestSeq, largestSeq uint64
 
 	first := true
 
@@ -40,19 +39,14 @@ func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta,
 		if first {
 			smallest = make([]byte, len(key))
 			copy(smallest, key)
-			// Initialize seq range?
-			// We can extract seq from internal key if needed, or rely on memtable bounds if we tracked them.
-			// For now, let's just use what we have.
+			// Track first key as smallest (seq tracking deferred).
 			first = false
 		}
 
 		largest = make([]byte, len(key))
 		copy(largest, key)
 
-		// In a real implementation, we would extract the sequence number here to populate SmallestSeq/LargestSeq
-		// but since we aren't rigorously using them for overlap checks yet, we can skip or extract if easy.
-		// internal.ExtractTrailer(key) -> seq, type
-		// leaving seq tracking for later if not strictly required for v0.8 functionality.
+		// Seq tracking is TODO for future versions.
 
 		count++
 		it.Next()
@@ -68,7 +62,5 @@ func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta,
 		Level:       0,
 		SmallestKey: smallest,
 		LargestKey:  largest,
-		// SmallestSeq: ...
-		// LargestSeq: ...
 	}, nil
 }

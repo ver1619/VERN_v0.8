@@ -5,7 +5,7 @@
 * Write(Batch)
 * Single writer thread
 * Each write is assigned monotonically increasing seq.number
-* Each Wal entry is encoded  [length | payload | checksum], stored in bytes
+* Each Wal entry is encoded  `[length | payload | checksum]`, stored in bytes
 * Wal Append
 * fsync (done before Ack)
 * Memtable Insert

@@ -6,8 +6,7 @@ import (
 	"vern_kv0.8/manifest"
 )
 
-// ReplayManifest replays the manifest file and builds a VersionSet.
-// Replay stops at the first invalid record.
+// ReplayManifest rebuilds VersionSet from manifest file.
 func ReplayManifest(path string) (*VersionSet, error) {
 	file, err := os.Open(path)
 	if err != nil {

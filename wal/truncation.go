@@ -5,16 +5,8 @@ import (
 	"sort"
 )
 
-// Truncate deletes obsolete WAL segments safely.
-//
-// Inputs:
-// - walDir: directory containing WAL segments
-// - cutoffSeq: all records <= cutoffSeq are durable
-//
-// Guarantees:
-// - Prefix-only deletion
-// - Idempotent
-// - Crash-safe
+// Truncate safely removes old WAL segments.
+// Persists change by syncing directory.
 func Truncate(walDir string, cutoffSeq uint64) error {
 	entries, err := os.ReadDir(walDir)
 	if err != nil {

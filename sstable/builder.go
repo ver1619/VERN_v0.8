@@ -73,14 +73,8 @@ func (b *Builder) Add(key, value []byte) error {
 	copy(kCopy, key)
 	b.keys = append(b.keys, kCopy)
 
-	b.lastKey = key // Copy is handled above for filter, but we need strictly lastKey for index
-	// Wait, we can reuse kCopy for lastKey logic too if we want, but logic below needs to be careful.
-	// For simplicity, let's keep logic distinct.
-
-	// Actually, b.lastKey logic below makes a copy anyway before use in Index.
-	// But `b.lastKey` currently points to `key` which might be unsafe.
-	// In previous step I didn't enforce copy for `b.lastKey` immediately.
-	// Let's rely on the copy made in Flush().
+	b.lastKey = key
+	// lastKey copy handled in Flush().
 
 	if b.dataBlock.CurrentSize() >= blockSize {
 		if err := b.Flush(); err != nil {

@@ -2,10 +2,7 @@ package iterators
 
 import "vern_kv0.8/internal"
 
-// VersionFilterIterator filters InternalKeys based on snapshot visibility.
-//
-// It wraps another InternalIterator and hides versions with
-// sequence numbers greater than readSeq.
+// VersionFilterIterator filters keys visible at a readSeq.
 type VersionFilterIterator struct {
 	child   InternalIterator
 	readSeq uint64

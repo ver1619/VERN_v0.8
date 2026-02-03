@@ -1,7 +1,6 @@
 package manifest
 
-// Compile-time assertions to lock on-disk constants.
-// These MUST fail to compile if values change.
+// Compile-time checks to prevent accidental constant changes.
 
 const (
 	_ = uint8(1) / (uint8(1) - (RecordTypeAddSSTable ^ 0x01))

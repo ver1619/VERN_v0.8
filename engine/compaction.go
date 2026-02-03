@@ -16,30 +16,43 @@ func (db *DB) PickCompaction() (int, bool) {
 	return db.version.PickCompactionSimple()
 }
 
-// CompactLevel executes compaction for a given level.
-// Simplest strategy: L0 -> L1.
-// 1. Pick all L0 files.
-// 2. Pick overlapping L1 files.
-// 3. Merge.
-// 4. Update Manifest.
+// CompactLevel executes compaction.
+// L0 -> L1: merge all L0 + overlaps.
+// L1+ -> L+1: pick one file + overlaps.
 func (db *DB) CompactLevel(level int) error {
-	if level != 0 {
-		return fmt.Errorf("only L0->L1 compaction supported in v0.8")
+	if level >= NumLevels-1 {
+		return fmt.Errorf("cannot compact max level")
 	}
 
 	// 1. Pick inputs under lock
 	db.mu.Lock()
-	l0 := db.version.Levels[0]
-	if len(l0) == 0 {
-		db.mu.Unlock()
-		return nil
-	}
-
-	l1 := db.version.Levels[1]
-
 	var inputs []SSTableMeta
-	inputs = append(inputs, l0...)
-	inputs = append(inputs, l1...)
+
+	if level == 0 {
+		// L0 compaction strategy stays same: compact all L0 + all L1 into L1
+		l0 := db.version.Levels[0]
+		if len(l0) == 0 {
+			db.mu.Unlock()
+			return nil
+		}
+		l1 := db.version.Levels[1]
+
+		inputs = append(inputs, l0...)
+		inputs = append(inputs, l1...)
+	} else {
+		// L1+ strategy: Pick ONE file from current level
+		currentLevel := db.version.Levels[level]
+		if len(currentLevel) == 0 {
+			db.mu.Unlock()
+			return nil
+		}
+		picked := currentLevel[0] // Simple policy: pick first
+		inputs = append(inputs, picked)
+
+		// Pick overlaps from next level
+		overlaps := db.version.GetOverlappingInputs(level+1, picked.SmallestKey, picked.LargestKey)
+		inputs = append(inputs, overlaps...)
+	}
 
 	fileNum := db.nextFileNum
 	db.nextFileNum++
@@ -63,6 +76,12 @@ func (db *DB) CompactLevel(level int) error {
 	// We might produce multiple files if size > limit.
 	// For v0.8 basic, single file output if small enough.
 
+	// Determine target level
+	targetLevel := level + 1
+	if level == 0 {
+		targetLevel = 1
+	}
+
 	filename := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", fileNum))
 
 	builder, err := sstable.NewBuilder(filename)
@@ -80,16 +99,12 @@ func (db *DB) CompactLevel(level int) error {
 		_, typ, _ := internal.ExtractTrailer(key)
 
 		// Tombstone GC:
-		// If this is a tombstone and we are merging into L1,
-		// and we know for sure there is no data at L2..L6 for this key range,
-		// we can drop it.
-		// For v0.8 simplified: if L2..L6 are empty, we drop all tombstones merging into L1.
+		// Drop tombstones if L2+ levels are empty (safe bottom-level GC).
 		if typ == internal.RecordTypeTombstone {
 			isBottom := true
-			for l := 2; l < NumLevels; l++ {
+			for l := targetLevel + 1; l < NumLevels; l++ {
 				if len(db.version.Levels[l]) > 0 {
-					// We'd need overlap check here for production,
-					// but for v0.8 if any higher level exists, we play safe.
+					// Skip overlap check for v0.8 (conservative approach).
 					isBottom = false
 					break
 				}
@@ -126,7 +141,7 @@ func (db *DB) CompactLevel(level int) error {
 	// Remove inputs, add output
 	newMeta := SSTableMeta{
 		FileNum:     fileNum,
-		Level:       1, // Always L0->L1
+		Level:       uint32(targetLevel),
 		SmallestKey: smallest,
 		LargestKey:  largest,
 	}
@@ -165,10 +180,10 @@ func (db *DB) MaybeScheduleCompaction() {
 	defer db.compactionMu.Unlock()
 
 	db.mu.RLock()
-	needsCompaction := len(db.version.Levels[0]) >= 4
+	level, needs := db.PickCompaction()
 	db.mu.RUnlock()
 
-	if needsCompaction {
-		db.CompactLevel(0)
+	if needs {
+		db.CompactLevel(level)
 	}
 }

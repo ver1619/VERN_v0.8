@@ -4,7 +4,7 @@ import (
 	"hash/crc32" // Using crc32 as a simple hash function for now, usually murmur3 is preferred but standard lib is safer without deps
 )
 
-// FilterPolicy defines the interface for filter generation and checking.
+// FilterPolicy generates and checks key existance filters.
 type FilterPolicy interface {
 	Name() string
 	CreateFilter(keys [][]byte) []byte

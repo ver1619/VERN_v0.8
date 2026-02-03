@@ -6,6 +6,7 @@ import (
 	"vern_kv0.8/engine"
 )
 
+// TestOpenPutGet verifies basic persistence across restarts.
 func TestOpenPutGet(t *testing.T) {
 	dir := t.TempDir()
 

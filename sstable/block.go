@@ -42,13 +42,8 @@ func (b *BlockBuilder) Reset() {
 }
 
 func (b *BlockBuilder) Add(key, value []byte) {
-	// Prefix compression could go here, for now using simple encoding
-	// Shared (0) | Unshared (len) | Value Len | Key | Value
-
-	// shared := 0
-	// TODO: Implement prefix compression if needed. For now simplified:
-	// Format without prefix compression:
-	// Key Len (varint) | Value Len (varint) | Key | Value
+	// Format: KeyLen(varint) | ValueLen(varint) | Key | Value.
+	// No prefix compression in v0.8.
 
 	// If we reached restart interval, add a new restart point
 	if b.counter >= restartInterval {

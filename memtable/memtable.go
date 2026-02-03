@@ -23,11 +23,7 @@ type entry struct {
 //
 
 // Memtable is an in-memory sorted structure of InternalKey -> value.
-//
-// Invariants:
-// - Entries are sorted strictly by internal.Comparator
-// - Insert-only (no mutation, no deletion)
-// - Tombstones are stored as values (interpreted later)
+// Sorted (Insert-only) store.
 type Memtable struct {
 	mu      sync.RWMutex
 	cmp     internal.Comparator
@@ -45,7 +41,7 @@ type Entry struct {
 // Construction
 //
 
-// New creates an empty memtable.
+// New returns a new Memtable.
 func New() *Memtable {
 	return &Memtable{
 		cmp:     internal.Comparator{},
@@ -57,10 +53,8 @@ func New() *Memtable {
 // Write path
 //
 
-// Insert inserts an InternalKey -> value into the memtable.
-// The key MUST already be an encoded InternalKey.
-//
-// Ordering is preserved using binary search.
+// Insert inserts an encoded InternalKey -> value.
+// Thread-safe.
 func (m *Memtable) Insert(key []byte, value []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

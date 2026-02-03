@@ -2,8 +2,7 @@ package engine
 
 import "bytes"
 
-// scanIterator filters an underlying iterator
-// based on user-key range or prefix.
+// scanIterator filters keys by user range [start, limit).
 type scanIterator struct {
 	inner  Iterator
 	start  []byte
@@ -16,6 +15,7 @@ func (it *scanIterator) SeekToFirst() {
 	it.advance()
 }
 
+// Next advances to the next key in range.
 func (it *scanIterator) Next() {
 	it.inner.Next()
 	it.advance()

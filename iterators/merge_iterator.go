@@ -6,7 +6,7 @@ import (
 	"vern_kv0.8/internal"
 )
 
-// MergeIterator merges multiple sorted InternalIterators into one.
+// MergeIterator combines multiple sorted iterators into one sorted view.
 type MergeIterator struct {
 	iters []InternalIterator
 	valid []bool
@@ -18,7 +18,7 @@ type MergeIterator struct {
 	cmp         internal.Comparator
 }
 
-// NewMergeIterator creates a merge iterator over child iterators.
+// NewMergeIterator creates a merging iterator.
 func NewMergeIterator(children []InternalIterator) *MergeIterator {
 	return &MergeIterator{
 		iters: children,

@@ -270,11 +270,8 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 	// SSTables
 	sstables := db.getSortedCandidatedTables() // Uses VersionSet (safe under RLock)
 
-	// Create iterators for SSTables (IO)
-	// We hold RLock here, so we block Writes/Flush commits, but multiple reads are fine.
-	// Opening files is reasonably fast (assuming we don't block on weird IO).
-	// If we wanted non-blocking NEW iterators, we'd copy state and unlock, but invalidation is tricky.
-	// For v0.8 RLock is fine.
+	// Create iterators for SSTables (IO).
+	// Holds RLock to block conflicting writes/flushes, but allows concurrent reads.
 
 	for _, meta := range sstables {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
@@ -442,9 +439,7 @@ func (db *DB) NewPrefixIterator(
 //
 
 // freezeMemtable moves the active memtable into immutables
-// and installs a new empty active memtable.
-//
-// No flushing, no persistence yet.
+// and initializes a new active memtable.
 func (db *DB) freezeMemtable() {
 	db.mu.Lock()
 	frozen := db.memtable

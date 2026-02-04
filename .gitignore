@@ -1,0 +1,45 @@
+/bin/
+/dist/
+*.exe
+*.out
+*.test
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Logs & temp files
+*.log
+*.tmp
+tmp/
+temp/
+
+# Database runtime data (generated at runtime, NOT source)
+data/
+**/data/
+MANIFEST
+*.sst
+*.wal
+CURRENT
+LOCK
+LOG
+LOG.old
+.log
+
+# Profiling / coverage
+*.prof
+coverage.out
+
+# Go workspace / tooling
+go.work
+go.work.sum
+

@@ -20,10 +20,23 @@ type dbIterator struct {
 
 func (it *dbIterator) SeekToFirst() {
 	it.inner.SeekToFirst()
+	it.skipTombstones()
 }
 
 func (it *dbIterator) Next() {
 	it.inner.Next()
+	it.skipTombstones()
+}
+
+func (it *dbIterator) skipTombstones() {
+	for it.inner.Valid() {
+		_, typ, _ := internal.ExtractTrailer(it.inner.Key())
+		if typ == internal.RecordTypeTombstone {
+			it.inner.Next()
+			continue
+		}
+		break
+	}
 }
 
 func (it *dbIterator) Valid() bool {

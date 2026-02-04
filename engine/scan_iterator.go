@@ -8,9 +8,11 @@ type scanIterator struct {
 	start  []byte
 	end    []byte
 	prefix []byte
+	stop   bool
 }
 
 func (it *scanIterator) SeekToFirst() {
+	it.stop = false
 	it.inner.SeekToFirst()
 	it.advance()
 }
@@ -22,7 +24,7 @@ func (it *scanIterator) Next() {
 }
 
 func (it *scanIterator) Valid() bool {
-	return it.inner.Valid()
+	return !it.stop && it.inner.Valid()
 }
 
 func (it *scanIterator) Key() []byte {
@@ -51,6 +53,7 @@ func (it *scanIterator) advance() {
 
 		if it.end != nil && bytes.Compare(k, it.end) >= 0 {
 			// end bound reached — stop iteration
+			it.stop = true
 			return
 		}
 

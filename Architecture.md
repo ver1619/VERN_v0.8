@@ -1,6 +1,6 @@
-## High-Level Overview
+# High-Level Overview
 
-**1. Write Path (Put / Delete)**
+## 1. Write Path (Put / Delete)
 
 * Write(Batch)
 * Single writer thread
@@ -14,35 +14,35 @@
 Client
   |
   | Put / Delete
-  v
+  ▼
 Write(Batch)
   |
   | acquire write mutex (single writer)
-  v
+  ▼
 Assign Sequence Numbers
   |
-  v
+  ▼
 Encode WAL Batch (Batch + Frame Record + CRC)
   |
-  v
+  ▼
 Append to WAL (active segment)
   |
-  v
+  ▼
 fsync(WAL)   <-- DURABILITY BOUNDARY
   |
-  v
+  ▼
 Apply to Memtable
   |
-  v
+  ▼
 Release write mutex
   |
-  v
+  ▼
 Return success(Ack) to client
 ```
 
 --- 
 
-**2. Internal key-value Semantics**
+## 2. Internal key-value Semantics
 
 Rules:
 ` (key ASC, seq DESC)`
@@ -61,7 +61,7 @@ Insert InternalKey(key, seq, TOMBSTONE)
 
 ---
 
-**3. WAL**
+## 3. WAL
 
 **a) Record Format**
 ```go
@@ -98,6 +98,38 @@ Record_1 | Record_2 | ... | Record_N
 +--------------------------------------------------+
 ```
 
+### WAL Record Framing
+```
+Put / Delete request
+        │
+        ▼
+Assign sequence number
+        │
+        ▼
+Construct internal key
+(user key + seq + type)
+        │
+        ▼
+Encode value (or tombstone)
+        │
+        ▼
+Build WAL payload
+(internal key + value)
+        │
+        ▼
+Compute record length
+        │
+        ▼
+Compute checksum (CRC)
+        │
+        ▼
+Assemble WAL record frame
+[length | payload | checksum]
+        │
+        ▼
+Write is now framed
+```
+
 **Atomicity Rules**<br>
 A batch is:
 - Fully replayed Or fully ignored
@@ -106,7 +138,43 @@ A batch is:
 How This Is Enforced?
 - CRC covers entire batch
 - Count and SeqStart are validated
-- Any mismatch → discard entire record
+- Any mismatch → discard entire record<br>
+
+### WAL Durability
+```
+Append record to WAL buffer
+        │
+        ▼
+Write bytes to OS page cache
+        │
+        ▼
+      fsync
+        │
+        ▼
+OS guarantees persistence
+        │
+        ▼
+Write is now durable
+```
+
+**Failure Scenarios**<br>
+Case 1: **Crash mid-record**<br>
+- Length read but payload incomplete
+- CRC mismatch
+- Replay stops safely<br>
+
+Case 2: **Crash after fsync**<br>
+- Record is valid
+- CRC passes
+- Batch is replayed fully<br>
+
+Case 3: **Bit corruption**<br>
+- CRC mismatch
+- Replay stops
+- Earlier data remains valid
+
+
+
 
 
 

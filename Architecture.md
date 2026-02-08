@@ -98,6 +98,12 @@ Record_1 | Record_2 | ... | Record_N
 +--------------------------------------------------+
 ```
 
+**e) Record Type**<br>
+```go
+VALUE = 0x01
+TOMBSTONE = 0x02
+```
+
 ### WAL Record Framing
 ```
 Put / Delete request
@@ -173,11 +179,39 @@ Case 3: **Bit corruption**<br>
 - Replay stops
 - Earlier data remains valid
 
+### WAL Manager
 
+The **WAL Manager** is the durability gatekeeper.<br>
+It controls:<br>
+- Write atomicity
+- Durability boundary
+- Crash recovery replay
+- WAL lifecycle<br>
 
+**How muliple WAL segments look?**
+```go
+wal/
+├── wal_000001.log
+├── wal_000002.log
+├── wal_000003.log  ← active
+```
 
+**Each WAL record**<br>
+`[ Length | Payload | CRC ]`
 
+Each batch:<br>
+- Has a starting sequence number
+- Contains multiple logical records
+- Is atomic
 
+**Responsibilties**<br>
+- Assign sequence ranges
+- Encode atomic batches
+- Append to active segment
+- fsync before acknowledgment
+- Rotate segments
+- Support replay
+- Support truncation
 
 
 

@@ -33,7 +33,7 @@ func TestFullSSTable(t *testing.T) {
 	}
 
 	// Read SSTable
-	r, err := NewReader(file)
+	r, err := NewReader(file, nil)
 	if err != nil {
 		t.Fatalf("NewReader: %v", err)
 	}

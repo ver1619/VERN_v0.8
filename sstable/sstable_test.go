@@ -24,7 +24,7 @@ func TestSSTableIterator(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	it, err := NewIterator(path)
+	it, err := NewIterator(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

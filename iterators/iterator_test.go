@@ -26,7 +26,7 @@ func TestMergeMemtableAndSSTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sstIt, err := sstable.NewIterator(sstPath)
+	sstIt, err := sstable.NewIterator(sstPath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

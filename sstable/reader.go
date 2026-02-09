@@ -3,19 +3,24 @@ package sstable
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
+
+	"vern_kv0.8/internal/cache"
 )
 
 // Reader reads an SSTable.
 type Reader struct {
 	file *os.File
 	size int64
+	path string
 
 	filterPolicy FilterPolicy
 	filterData   []byte
+	cache        cache.Cache
 }
 
-func NewReader(path string) (*Reader, error) {
+func NewReader(path string, cache cache.Cache) (*Reader, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -29,7 +34,9 @@ func NewReader(path string) (*Reader, error) {
 	r := &Reader{
 		file:         f,
 		size:         info.Size(),
+		path:         path,
 		filterPolicy: NewBloomFilter(10), // Expect compatible filter
+		cache:        cache,
 	}
 
 	if err := r.loadFilter(); err != nil {
@@ -86,6 +93,15 @@ func (r *Reader) MayContain(key []byte) bool {
 }
 
 func (r *Reader) ReadBlock(handle BlockHandle) (*BlockIterator, error) {
+	// Check cache
+	var cacheKey string
+	if r.cache != nil {
+		cacheKey = fmt.Sprintf("%s|%d", r.path, handle.Offset)
+		if data := r.cache.Get(cacheKey); data != nil {
+			return NewBlockIterator(data), nil
+		}
+	}
+
 	data := make([]byte, handle.Length)
 	n, err := r.file.ReadAt(data, int64(handle.Offset))
 	if err != nil {
@@ -94,6 +110,12 @@ func (r *Reader) ReadBlock(handle BlockHandle) (*BlockIterator, error) {
 	if uint64(n) != handle.Length {
 		return nil, errors.New("incomplete block read")
 	}
+
+	// Populate cache
+	if r.cache != nil {
+		r.cache.Put(cacheKey, data)
+	}
+
 	return NewBlockIterator(data), nil
 }
 

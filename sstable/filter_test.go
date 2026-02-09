@@ -59,7 +59,7 @@ func TestFilterIntegration(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	r, err := NewReader(file)
+	r, err := NewReader(file, nil)
 	if err != nil {
 		t.Fatalf("NewReader: %v", err)
 	}

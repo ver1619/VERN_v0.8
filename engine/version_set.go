@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"sort"
+	"sync"
 )
 
 const NumLevels = 7
@@ -20,6 +21,8 @@ type SSTableMeta struct {
 
 // VersionSet is the in-memory representation of manifest state.
 type VersionSet struct {
+	mu sync.RWMutex
+
 	// Levels holds the tables for each level.
 	// L0 is unsorted (overlapping files).
 	// L1+ is sorted by key and non-overlapping.
@@ -39,6 +42,9 @@ func NewVersionSet() *VersionSet {
 
 // AddTable adds a new SSTable to the version set.
 func (v *VersionSet) AddTable(meta SSTableMeta) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
 	if meta.Level >= NumLevels {
 		return errors.New("invalid level")
 	}
@@ -58,6 +64,9 @@ func (v *VersionSet) AddTable(meta SSTableMeta) error {
 
 // RemoveTable marks an SSTable as obsolete and removes it from levels.
 func (v *VersionSet) RemoveTable(fileNum uint64) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
 	v.Obsolete[fileNum] = true
 
 	// Find and remove
@@ -75,6 +84,9 @@ func (v *VersionSet) RemoveTable(fileNum uint64) {
 
 // SetWALCutoff sets the WAL cutoff sequence.
 func (v *VersionSet) SetWALCutoff(seq uint64) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
 	if seq > v.WALCutoffSeq {
 		v.WALCutoffSeq = seq
 	}
@@ -82,6 +94,9 @@ func (v *VersionSet) SetWALCutoff(seq uint64) {
 
 // GetAllTables returns a flattened list of all tables (useful for recovery/scanning).
 func (v *VersionSet) GetAllTables() []SSTableMeta {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	var all []SSTableMeta
 	for _, files := range v.Levels {
 		all = append(all, files...)
@@ -92,6 +107,9 @@ func (v *VersionSet) GetAllTables() []SSTableMeta {
 // PickCompactionSimple is a placeholder for compaction picking logic.
 // Returns level to compact and boolean indicating if compaction is needed.
 func (v *VersionSet) PickCompactionSimple() (int, bool) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	// L0 -> L1 triggers if L0 has >= 4 files
 	if len(v.Levels[0]) >= 4 {
 		return 0, true
@@ -109,6 +127,9 @@ func (v *VersionSet) PickCompactionSimple() (int, bool) {
 
 // GetOverlappingInputs returns all tables in the specified level that overlap with [start, end].
 func (v *VersionSet) GetOverlappingInputs(level int, start, end []byte) []SSTableMeta {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	var inputs []SSTableMeta
 	for _, t := range v.Levels[level] {
 		// Intersection check: ! (t.Largest < start || t.Smallest > end)

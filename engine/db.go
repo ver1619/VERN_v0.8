@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"vern_kv0.8/internal"
+	"vern_kv0.8/internal/cache"
 	"vern_kv0.8/iterators"
 	"vern_kv0.8/manifest"
 	"vern_kv0.8/memtable"
@@ -18,6 +19,8 @@ import (
 )
 
 var ErrNotFound = errors.New("key not found")
+
+const MemtableSizeLimit = 4 * 1024 * 1024 // 4MB
 
 // DB is the main engine handle.
 type DB struct {
@@ -34,6 +37,7 @@ type DB struct {
 
 	manifest    *manifest.Manifest
 	nextFileNum uint64
+	cache       cache.Cache
 }
 
 //
@@ -110,6 +114,9 @@ func Open(dir string) (*DB, error) {
 		}
 	}
 
+	// Initialize Block Cache (8MB)
+	db.cache = cache.NewLRUCache(8 * 1024 * 1024)
+
 	return db, nil
 }
 
@@ -168,6 +175,11 @@ func (db *DB) Put(key, value []byte) error {
 	ikey := internal.EncodeInternalKey(key, seq, internal.RecordTypeValue)
 	db.memtable.Insert(ikey, value)
 
+	if db.memtable.ApproximateSize() >= MemtableSizeLimit {
+		db.rotateMemtableLocked()
+		go db.MaybeScheduleFlush()
+	}
+
 	db.nextSeq++
 	return nil
 }
@@ -198,6 +210,11 @@ func (db *DB) Write(batch *wal.Batch) error {
 		ikey := internal.EncodeInternalKey(r.Key, seq, typ)
 		db.memtable.Insert(ikey, r.Value)
 		seq++
+	}
+
+	if db.memtable.ApproximateSize() >= MemtableSizeLimit {
+		db.rotateMemtableLocked()
+		go db.MaybeScheduleFlush()
 	}
 
 	db.nextSeq = seq
@@ -275,7 +292,7 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 
 	for _, meta := range sstables {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
-		sstIt, err := sstable.NewIterator(path)
+		sstIt, err := sstable.NewIterator(path, db.cache)
 		if err != nil {
 			db.mu.RUnlock()
 			return nil, err
@@ -364,7 +381,7 @@ func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 
 	for _, meta := range sstables {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
-		sstIt, err := sstable.NewIterator(path)
+		sstIt, err := sstable.NewIterator(path, db.cache)
 		if err != nil {
 			db.mu.RUnlock()
 			panic(fmt.Sprintf("failed to open sstable %s: %v", path, err))
@@ -438,13 +455,19 @@ func (db *DB) NewPrefixIterator(
 // Lifecycle (Phase L1)
 //
 
-// freezeMemtable moves the active memtable into immutables
-// and initializes a new active memtable.
-func (db *DB) freezeMemtable() {
-	db.mu.Lock()
+// rotateMemtableLocked moves the active memtable into immutables.
+// Caller must hold db.mu.
+func (db *DB) rotateMemtableLocked() {
 	frozen := db.memtable
 	db.immutables = append(db.immutables, frozen)
 	db.memtable = memtable.New()
+}
+
+// freezeMemtable moves the active memtable into immutables
+// and initializes a new active memtable. (Thread-safe wrapper)
+func (db *DB) freezeMemtable() {
+	db.mu.Lock()
+	db.rotateMemtableLocked()
 	db.mu.Unlock() // Release DB lock before flush
 
 	db.MaybeScheduleFlush()

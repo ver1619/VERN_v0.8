@@ -62,7 +62,7 @@ func (db *DB) CompactLevel(level int) error {
 	var iters []iterators.InternalIterator
 	for _, meta := range inputs {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
-		sstIt, err := sstable.NewIterator(path)
+		sstIt, err := sstable.NewIterator(path, db.cache)
 		if err != nil {
 			return err
 		}
@@ -74,7 +74,6 @@ func (db *DB) CompactLevel(level int) error {
 
 	// 3. Write output(s)
 	// We might produce multiple files if size > limit.
-	// For v0.8 basic, single file output if small enough.
 
 	// Determine target level
 	targetLevel := level + 1

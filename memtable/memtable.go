@@ -25,9 +25,10 @@ type entry struct {
 // Memtable is an in-memory sorted structure of InternalKey -> value.
 // Sorted (Insert-only) store.
 type Memtable struct {
-	mu      sync.RWMutex
-	cmp     internal.Comparator
-	entries []entry
+	mu        sync.RWMutex
+	cmp       internal.Comparator
+	entries   []entry
+	sizeBytes int
 }
 
 // Entry is a read-only view of a memtable entry.
@@ -73,6 +74,8 @@ func (m *Memtable) Insert(key []byte, value []byte) {
 		key:   clone(key),
 		value: clone(value),
 	}
+
+	m.sizeBytes += len(key) + len(value)
 }
 
 //
@@ -84,6 +87,13 @@ func (m *Memtable) Size() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.entries)
+}
+
+// ApproximateSize returns the approximate memory usage in bytes.
+func (m *Memtable) ApproximateSize() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.sizeBytes
 }
 
 // Entry returns the i-th entry in sorted order.

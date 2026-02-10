@@ -1,6 +1,6 @@
 # Tests v0.8
 
-```
+```python
 === RUN   TestCompactionL0toL1
 --- PASS: TestCompactionL0toL1 (0.24s)
 === RUN   TestCompactionL1ToL2

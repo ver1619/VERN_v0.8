@@ -3,13 +3,14 @@
 
 ```
 ├── 📁 cmd
-|    ├── 📁 vern-cli
-|        └── 📄 main.go
+│   └── 📁 vern-cli
+│       └── 📄 main.go
 ├── 📁 engine
-│   ├── 📄 bootstrap.go
 │   ├── 📄 compaction.go
 │   ├── 📄 compaction_test.go
+│   ├── 📄 compaction_tiered_test.go
 │   ├── 📄 concurrency_test.go
+│   ├── 📄 config.go
 │   ├── 📄 db.go
 │   ├── 📄 db_test.go
 │   ├── 📄 flush.go
@@ -27,6 +28,10 @@
 │   ├── 📄 version_set.go
 │   └── 📄 version_set_test.go
 ├── 📁 internal
+│   ├── 📁 cache
+│   │   ├── 📄 cache.go
+│   │   ├── 📄 cache_test.go
+│   │   └── 📄 lru.go
 │   ├── 📄 comparator.go
 │   ├── 📄 internal_key.go
 │   └── 📄 internal_key_test.go
@@ -35,7 +40,7 @@
 │   ├── 📄 iterator_test.go
 │   ├── 📄 memtable_iterator.go
 │   ├── 📄 merge_iterator.go
-│   └── 📄 version_filter_iterator.go
+│   └── 📄 ersion_filter_iterator.go
 ├── 📁 manifest
 │   ├── 📄 assertions.go
 │   ├── 📄 constants.go
@@ -44,11 +49,15 @@
 │   └── 📄 record.go
 ├── 📁 memtable
 │   ├── 📄 memtable.go
-│   └── 📄 memtable_test.go
+│   ├── 📄 memtable_test.go
+│   ├── 📄 skiplist.go
+│   └── 📄 skiplist_test.go
 ├── 📁 sstable
 │   ├── 📄 block.go
 │   ├── 📄 block_test.go
 │   ├── 📄 builder.go
+│   ├── 📄 compression.go
+│   ├── 📄 compression_test.go
 │   ├── 📄 filter.go
 │   ├── 📄 filter_test.go
 │   ├── 📄 full_test.go
@@ -66,12 +75,13 @@
 │   │   └── 📄 wal_fsync_test.go
 │   ├── 📁 determinism
 │   │   └── 📄 replay_repeatability_test.go
-│   └── 📁 integration
-│       ├── 📄 full_test.go
-│       └── 📄 open_put_get_test.go
+│   ├── 📁 integration
+│   │   ├── 📄 flush_main_test.go
+│   │   ├── 📄 full_test.go
+│   │   └── 📄 open_put_get_test.go
+│   └── 📄 manifest_test.go
 ├── 📁 wal
-│   ├── 📄 crash.go
-│   ├── 📄 record.go
+│   ├── 📄 ecord.go
 │   ├── 📄 record_test.go
 │   ├── 📄 segment.go
 │   ├── 📄 segment_test.go
@@ -79,8 +89,12 @@
 │   ├── 📄 truncation_test.go
 │   ├── 📄 wal.go
 │   └── 📄 wal_test.go
+├── ⚙️ .gitignore
+├── 📝 Architecture.md
+├── 📝 Invariants.md
 ├── 🪪 LICENSE
 ├── 📝 README.md
 ├── 📄 go.mod
-└── 🌳project-Tree.md
+├── 🧪 tests.md
+└── 🌳 project-Tree.md
 ```

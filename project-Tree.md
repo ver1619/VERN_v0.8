@@ -91,10 +91,12 @@
 │   └── 📄 wal_test.go
 ├── ⚙️ .gitignore
 ├── 📝 Architecture.md
-├── 📝 Invariants.md
-├── 🪪 LICENSE
-├── 📝 README.md
+├── 📝 cli-ui.md
 ├── 📄 go.mod
+├── 📄 Invariants.md
+├── 🪪 LICENSE
+├── 🌳 project-Tree.md
+├── 📝 README.md
 ├── 🧪 tests.md
-└── 🌳 project-Tree.md
+
 ```

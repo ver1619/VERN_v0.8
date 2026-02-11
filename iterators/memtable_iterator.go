@@ -2,35 +2,33 @@ package iterators
 
 import "vern_kv0.8/memtable"
 
-// MemtableIterator iterates over an in-memory memtable.
+// MemtableIterator provides an iterator interface for the memtable.
 type MemtableIterator struct {
-	mt    *memtable.Memtable
-	index int
+	iter *memtable.Iterator
 }
 
 func NewMemtableIterator(mt *memtable.Memtable) *MemtableIterator {
 	return &MemtableIterator{
-		mt:    mt,
-		index: -1,
+		iter: mt.Iterator(),
 	}
 }
 
 func (it *MemtableIterator) SeekToFirst() {
-	it.index = 0
+	it.iter.SeekToFirst()
 }
 
 func (it *MemtableIterator) Next() {
-	it.index++
+	it.iter.Next()
 }
 
 func (it *MemtableIterator) Valid() bool {
-	return it.index >= 0 && it.index < it.mt.Size()
+	return it.iter.Valid()
 }
 
 func (it *MemtableIterator) Key() []byte {
-	return it.mt.Entry(it.index).Key
+	return it.iter.Key()
 }
 
 func (it *MemtableIterator) Value() []byte {
-	return it.mt.Entry(it.index).Value
+	return it.iter.Value()
 }

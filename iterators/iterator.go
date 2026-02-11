@@ -1,6 +1,6 @@
 package iterators
 
-// InternalIterator defines the interface for iterating over DB keys.
+// InternalIterator interface.
 type InternalIterator interface {
 	SeekToFirst()
 	Next()

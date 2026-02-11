@@ -2,7 +2,7 @@ package iterators
 
 import "vern_kv0.8/internal"
 
-// VersionFilterIterator filters keys visible at a readSeq.
+// VersionFilterIterator hides records with sequence numbers higher than readSeq.
 type VersionFilterIterator struct {
 	child   InternalIterator
 	readSeq uint64
@@ -12,7 +12,7 @@ type VersionFilterIterator struct {
 	value []byte
 }
 
-// NewVersionFilterIterator creates a new filtering iterator.
+// NewVersionFilterIterator initializes a version filter.
 func NewVersionFilterIterator(
 	child InternalIterator,
 	readSeq uint64,
@@ -44,7 +44,7 @@ func (it *VersionFilterIterator) Value() []byte {
 	return it.value
 }
 
-// advance moves to the next visible version.
+// advance skips records not visible at the current sequence.
 func (it *VersionFilterIterator) advance() {
 	it.valid = false
 
@@ -52,7 +52,7 @@ func (it *VersionFilterIterator) advance() {
 		k := it.child.Key()
 		seq, _, err := internal.ExtractTrailer(k)
 		if err != nil {
-			// Corruption: stop iteration safely
+			// Terminate on key corruption.
 			return
 		}
 
@@ -64,7 +64,7 @@ func (it *VersionFilterIterator) advance() {
 			return
 		}
 
-		// Version too new — skip
+		// Skip newer versions.
 		it.child.Next()
 	}
 }

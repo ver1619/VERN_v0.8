@@ -6,7 +6,7 @@ import (
 	"vern_kv0.8/internal"
 )
 
-// MergeIterator combines multiple sorted iterators into one sorted view.
+// MergeIterator merges multiple sorted iterators into one.
 type MergeIterator struct {
 	iters []InternalIterator
 	valid []bool
@@ -18,7 +18,7 @@ type MergeIterator struct {
 	cmp         internal.Comparator
 }
 
-// NewMergeIterator creates a merging iterator.
+// NewMergeIterator initializes a merging iterator.
 func NewMergeIterator(children []InternalIterator) *MergeIterator {
 	return &MergeIterator{
 		iters: children,
@@ -55,11 +55,11 @@ func (m *MergeIterator) Value() []byte {
 	return m.currValue
 }
 
-// advance selects the next visible InternalKey.
+// advance selects the next smallest key.
 func (m *MergeIterator) advance() {
 	best := -1
 
-	// Step 1: pick smallest InternalKey
+	// Find the smallest key across iterators.
 	for i, ok := range m.valid {
 		if !ok {
 			continue
@@ -82,7 +82,7 @@ func (m *MergeIterator) advance() {
 	m.currKey = m.iters[best].Key()
 	m.currValue = m.iters[best].Value()
 
-	// Step 2: advance all iterators pointing to same InternalKey
+	// Skip duplicate internal keys.
 	for i, it := range m.iters {
 		if m.valid[i] && bytes.Equal(it.Key(), m.currKey) {
 			it.Next()
@@ -90,7 +90,7 @@ func (m *MergeIterator) advance() {
 		}
 	}
 
-	// Step 3: version collapse (skip older versions of same user key)
+	// Advance past older versions of the same user key.
 	userKey := internal.ExtractUserKey(m.currKey)
 	for i, it := range m.iters {
 		for m.valid[i] {

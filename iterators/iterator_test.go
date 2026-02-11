@@ -13,7 +13,7 @@ func TestMergeMemtableAndSSTable(t *testing.T) {
 	dir := t.TempDir()
 	sstPath := filepath.Join(dir, "test.sst")
 
-	// ---- Build SSTable ----
+	// Build SSTable.
 	b, err := sstable.NewBuilder(sstPath)
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestMergeMemtableAndSSTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// ---- Build Memtable ----
+	// Build Memtable.
 	mt := memtable.New()
 	mt.Insert(
 		internal.EncodeInternalKey([]byte("a"), 2, internal.RecordTypeValue),
@@ -40,7 +40,7 @@ func TestMergeMemtableAndSSTable(t *testing.T) {
 
 	mtIt := NewMemtableIterator(mt)
 
-	// ---- Merge ----
+	// Merge and verify.
 	merge := NewMergeIterator([]InternalIterator{
 		mtIt,
 		sstIt,

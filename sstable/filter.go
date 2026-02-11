@@ -4,14 +4,14 @@ import (
 	"hash/crc32" // Using crc32 as a simple hash function for now, usually murmur3 is preferred but standard lib is safer without deps
 )
 
-// FilterPolicy generates and checks key existance filters.
+// FilterPolicy interface.
 type FilterPolicy interface {
 	Name() string
 	CreateFilter(keys [][]byte) []byte
 	KeyMayMatch(key, filter []byte) bool
 }
 
-// BloomFilter implements a standard Bloom Filter.
+// BloomFilter implementation.
 type BloomFilter struct {
 	bitsPerKey int
 }
@@ -37,9 +37,7 @@ func (f *BloomFilter) CreateFilter(keys [][]byte) []byte {
 
 	filter := make([]byte, bytes+1) // +1 for k (# of probes)
 
-	// Calculate number of probes (k)
-	// k = ln(2) * m / n
-	// k = 0.69 * bitsPerKey
+	// Calculate k
 	k := int(float64(f.bitsPerKey) * 0.69)
 	if k < 1 {
 		k = 1
@@ -88,5 +86,5 @@ func (f *BloomFilter) KeyMayMatch(key, filter []byte) bool {
 }
 
 func hash(b []byte) uint32 {
-	return crc32.ChecksumIEEE(b) // Simple hash for v0.8
+	return crc32.ChecksumIEEE(b) // Simple hash
 }

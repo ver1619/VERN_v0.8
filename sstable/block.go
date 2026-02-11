@@ -5,30 +5,23 @@ import (
 	"encoding/binary"
 )
 
-// BlockBuilder constructs a block of KV records.
-// Format:
-// Record 1
-// Record 2
-// ...
-// Restart Points (offsets to records)
-// Num Restarts (uint32)
+// BlockBuilder constructs a KV block.
 type BlockBuilder struct {
 	buf           bytes.Buffer
 	restarts      []uint32
 	restartCount  int
-	counter       int // items since last restart
+	counter       int // Items since last restart.
 	lastUnsafeKey []byte
 	finished      bool
 }
 
 const (
-	// restartInterval is the number of keys between restart points.
 	restartInterval = 16
 )
 
 func NewBlockBuilder() *BlockBuilder {
 	return &BlockBuilder{
-		restarts: []uint32{0}, // first restart point is at 0
+		restarts: []uint32{0}, // First restart point.
 	}
 }
 
@@ -42,22 +35,20 @@ func (b *BlockBuilder) Reset() {
 }
 
 func (b *BlockBuilder) Add(key, value []byte) {
-	// Format: KeyLen(varint) | ValueLen(varint) | Key | Value.
-	// No prefix compression in v0.8.
 
-	// If we reached restart interval, add a new restart point
+	// Add restart point
 	if b.counter >= restartInterval {
 		b.restarts = append(b.restarts, uint32(b.buf.Len()))
 		b.counter = 0
 	}
 
-	// Write simple length-prefixed key/value for now
+	// Write KV
 	putVarint(&b.buf, uint64(len(key)))
 	putVarint(&b.buf, uint64(len(value)))
 	b.buf.Write(key)
 	b.buf.Write(value)
 
-	b.lastUnsafeKey = key // Keep reference, be careful if caller reuses buffer
+	b.lastUnsafeKey = key // Keep reference for next key.
 	b.counter++
 }
 
@@ -80,10 +71,10 @@ func (b *BlockBuilder) Empty() bool {
 	return b.buf.Len() == 0
 }
 
-// BlockIterator iterates over a block.
+// BlockIterator parses a block.
 type BlockIterator struct {
 	data        []byte
-	restarts    uint32 // Offset where restarts begin
+	restarts    uint32 // Start of restart points.
 	numRestarts uint32
 
 	offset     int // Current offset in data
@@ -133,7 +124,7 @@ func (it *BlockIterator) SeekToFirst() {
 }
 
 func (it *BlockIterator) Seek(target []byte) {
-	// Binary search in restarts
+	// Binary search restart points.
 	left := uint32(0)
 	right := it.numRestarts - 1
 
@@ -141,9 +132,7 @@ func (it *BlockIterator) Seek(target []byte) {
 		mid := (left + right + 1) / 2
 		regionOffset := it.GetRestartPoint(mid)
 
-		// Parse key at this restart point
-		// Note: Restart points always point to full keys if we had compression
-		// Since we don't have compression yet, just read it.
+		// Parse key
 		key, _, _, ok := it.ParseEntry(int(regionOffset))
 		if !ok {
 			it.err = ErrBlockCorrupt
@@ -157,7 +146,7 @@ func (it *BlockIterator) Seek(target []byte) {
 		}
 	}
 
-	// Linear scan from the found restart point
+	// Scan linearly for target.
 	it.SeekToRestartPoint(left)
 
 	for {
@@ -186,7 +175,7 @@ func (it *BlockIterator) SeekToRestartPoint(index uint32) {
 	offset := it.GetRestartPoint(index)
 	it.nextOffset = int(offset)
 	it.offset = int(offset) // Prepare for Next/ParseNext
-	it.valid = false        // valid will be true after ParseNext
+	it.valid = false        // Validated after ParseNext.
 }
 
 func (it *BlockIterator) GetRestartPoint(index uint32) uint32 {

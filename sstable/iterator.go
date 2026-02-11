@@ -4,11 +4,8 @@ import (
 	"vern_kv0.8/internal/cache"
 )
 
-// NewIterator returns a new iterator for the given SSTable file.
+// NewIterator creates table iterator.
 func NewIterator(path string, cache cache.Cache) (*TableIterator, error) {
-	// Note: Ownership of the reader is returned to the iterator.
-	// We might need a way to close the reader when the iterator is done.
-	// For now, let's assume the iterator owns the reader.
 
 	r, err := NewReader(path, cache)
 	if err != nil {
@@ -16,4 +13,12 @@ func NewIterator(path string, cache cache.Cache) (*TableIterator, error) {
 	}
 
 	return r.NewIterator()
+}
+
+// Close closes the underlying Reader file handle.
+func (it *TableIterator) Close() error {
+	if it.reader != nil {
+		return it.reader.Close()
+	}
+	return nil
 }

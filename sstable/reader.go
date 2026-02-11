@@ -1,7 +1,6 @@
 package sstable
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -40,7 +39,7 @@ func NewReader(path string, cache cache.Cache) (*Reader, error) {
 	}
 
 	if err := r.loadFilter(); err != nil {
-		// Filter errors are non-fatal (proceed without filter).
+		// Filter errors are non-fatal.
 	}
 
 	return r, nil
@@ -58,14 +57,14 @@ func (r *Reader) loadFilter() error {
 		return err
 	}
 
-	// Seek for filter
+	// Find filter.
 	filterName := "vern.filter.bloom"
 	metaIndexBlock.Seek([]byte(filterName))
 
 	if metaIndexBlock.Valid() && string(metaIndexBlock.Key()) == filterName {
 		filterHandle := DecodeBlockHandle(metaIndexBlock.Value())
 
-		// Read the raw filter data
+		// Read filter data.
 		data := make([]byte, filterHandle.Length)
 		n, err := r.file.ReadAt(data, int64(filterHandle.Offset))
 		if err != nil {
@@ -87,13 +86,13 @@ func (r *Reader) Close() error {
 
 func (r *Reader) MayContain(key []byte) bool {
 	if r.filterData == nil || r.filterPolicy == nil {
-		return true // Assume yes if no filter
+		return true // Assume match if no filter.
 	}
 	return r.filterPolicy.KeyMayMatch(key, r.filterData)
 }
 
 func (r *Reader) ReadBlock(handle BlockHandle) (*BlockIterator, error) {
-	// Check cache
+	// Query cache.
 	var cacheKey string
 	if r.cache != nil {
 		cacheKey = fmt.Sprintf("%s|%d", r.path, handle.Offset)
@@ -102,6 +101,7 @@ func (r *Reader) ReadBlock(handle BlockHandle) (*BlockIterator, error) {
 		}
 	}
 
+	// Read block data.
 	data := make([]byte, handle.Length)
 	n, err := r.file.ReadAt(data, int64(handle.Offset))
 	if err != nil {
@@ -111,12 +111,30 @@ func (r *Reader) ReadBlock(handle BlockHandle) (*BlockIterator, error) {
 		return nil, errors.New("incomplete block read")
 	}
 
-	// Populate cache
-	if r.cache != nil {
-		r.cache.Put(cacheKey, data)
+	// Check compression type.
+	cType := data[len(data)-1]
+	payload := data[:len(data)-1]
+
+	var decoded []byte
+	switch int(cType) {
+	case NoCompression:
+		decoded = payload
+	case ZlibCompression:
+		var err error
+		decoded, err = decompress(payload)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unknown compression type: %d", cType)
 	}
 
-	return NewBlockIterator(data), nil
+	// Cache decoded block.
+	if r.cache != nil {
+		r.cache.Put(cacheKey, decoded)
+	}
+
+	return NewBlockIterator(decoded), nil
 }
 
 func (r *Reader) ReadFooter() (Footer, error) {
@@ -150,7 +168,7 @@ func (r *Reader) NewIterator() (*TableIterator, error) {
 	}, nil
 }
 
-// TableIterator iterates over an SSTable.
+// TableIterator traverses an SSTable.
 type TableIterator struct {
 	reader *Reader
 	index  *BlockIterator
@@ -200,7 +218,7 @@ func (it *TableIterator) Next() {
 	}
 	it.data.Next()
 	if !it.data.Valid() {
-		// End of data block, move to next
+		// Advance to next block.
 		it.index.Next()
 		it.loadDataBlock()
 		if it.data != nil {
@@ -221,7 +239,7 @@ func (it *TableIterator) loadDataBlock() {
 		return
 	}
 
-	// Decode block handle from index value
+	// Decode block handle.
 	handle := DecodeBlockHandle(it.index.Value())
 
 	block, err := it.reader.ReadBlock(handle)
@@ -231,9 +249,4 @@ func (it *TableIterator) loadDataBlock() {
 		return
 	}
 	it.data = block
-}
-
-// Helper to compare keys
-func compare(a, b []byte) int {
-	return bytes.Compare(a, b)
 }

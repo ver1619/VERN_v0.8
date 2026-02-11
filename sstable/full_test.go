@@ -16,13 +16,12 @@ func TestFullSSTable(t *testing.T) {
 		t.Fatalf("NewBuilder: %v", err)
 	}
 
-	// Write enough data to create multiple blocks (blockSize=4KB)
+	// Write data spanning multiple blocks.
 	const numKeys = 1000
 	for i := 0; i < numKeys; i++ {
 		key := fmt.Sprintf("k%04d", i)
 		value := fmt.Sprintf("v%04d", i)
-		// Approx 10 bytes key + 10 bytes value + overhead ~ 25 bytes
-		// 1000 * 25 = 25KB, should generate ~6-7 blocks
+		// Each entry is approximately 25 bytes.
 		if err := b.Add([]byte(key), []byte(value)); err != nil {
 			t.Fatalf("Add: %v", err)
 		}

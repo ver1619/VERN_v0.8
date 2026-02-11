@@ -51,7 +51,7 @@ func TestBlockBuilder(t *testing.T) {
 func TestBlockSeek(t *testing.T) {
 	b := NewBlockBuilder()
 
-	// Add enough keys to trigger multiple restarts (restartInterval=16)
+	// Trigger multiple restart points.
 	for i := 0; i < 100; i++ {
 		key := []byte(fmt.Sprintf("key%03d", i))
 		b.Add(key, []byte("val"))

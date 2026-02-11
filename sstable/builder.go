@@ -5,13 +5,12 @@ import (
 	"os"
 )
 
-// Builder constructs an SSTable.
+// Builder constructs SSTables.
 type Builder struct {
-	file        *os.File
-	writer      io.Writer
-	dataBlock   *BlockBuilder
-	indexBlock  *BlockBuilder
-	filterBlock *BlockBuilder // Not used as BlockBuilder, but we need to write it. Actually filter is just raw bytes.
+	file       *os.File
+	writer     io.Writer
+	dataBlock  *BlockBuilder
+	indexBlock *BlockBuilder
 
 	metaIndexBlock *BlockBuilder
 
@@ -28,7 +27,6 @@ type Builder struct {
 }
 
 const (
-	// Target block size before flushing (4KB)
 	blockSize = 4 * 1024
 )
 
@@ -54,7 +52,7 @@ func (b *Builder) Add(key, value []byte) error {
 		return b.err
 	}
 
-	// If the previous block was flushed, we need to add an index entry for it.
+	// Pending index entry
 	if b.pendingIndexEntry {
 		k := make([]byte, len(b.lastKey))
 		copy(k, b.lastKey)
@@ -68,13 +66,12 @@ func (b *Builder) Add(key, value []byte) error {
 
 	b.dataBlock.Add(key, value)
 
-	// Save key for filter
+	// Update filter state.
 	kCopy := make([]byte, len(key))
 	copy(kCopy, key)
 	b.keys = append(b.keys, kCopy)
 
 	b.lastKey = key
-	// lastKey copy handled in Flush().
 
 	if b.dataBlock.CurrentSize() >= blockSize {
 		if err := b.Flush(); err != nil {
@@ -86,32 +83,53 @@ func (b *Builder) Add(key, value []byte) error {
 	return nil
 }
 
-// Flush forces the current data block to be written to file.
+// Flush writes current block.
 func (b *Builder) Flush() error {
 	if b.dataBlock.Empty() {
 		return nil
 	}
 
-	// 1. Finish block
+	// Write filter block.
 	content := b.dataBlock.Finish()
 
-	// 2. Write to file
-	n, err := b.writer.Write(content)
+	// Compress block data.
+	compressed := compress(content)
+	// Use compression if it reduces size.
+
+	var final []byte
+	var cType byte
+
+	if len(compressed) < len(content)-2 { // simple heuristic
+		final = compressed
+		cType = byte(ZlibCompression)
+	} else {
+		final = content
+		cType = byte(NoCompression)
+	}
+
+	// Write to file
+	n, err := b.writer.Write(final)
 	if err != nil {
 		return err
 	}
 
-	// 3. Record handle
+	// Write compression type (1 byte)
+	if _, err := b.writer.Write([]byte{cType}); err != nil {
+		return err
+	}
+	n++
+
+	// Record handle
 	handle := BlockHandle{
 		Offset: b.offset,
 		Length: uint64(n),
 	}
 
-	// 4. Update state
+	// Update state
 	b.offset += uint64(n)
 	b.dataBlock.Reset()
 
-	// 5. Manage Index Entry
+	// Prepare index entry.
 	lk := make([]byte, len(b.lastKey))
 	copy(lk, b.lastKey)
 	b.lastKey = lk
@@ -127,12 +145,12 @@ func (b *Builder) Close() error {
 		return b.err
 	}
 
-	// Flush any remaining data
+	// Flush remaining
 	if err := b.Flush(); err != nil {
 		return err
 	}
 
-	// Add pending index entry for the last block
+	// Prepare index entry.
 	if b.pendingIndexEntry {
 		b.indexBlock.Add(b.lastKey, func() []byte {
 			buf := make([]byte, 16)
@@ -142,7 +160,7 @@ func (b *Builder) Close() error {
 		b.pendingIndexEntry = false
 	}
 
-	// --- Write Filter Block ---
+	// Write filter block.
 	var filterHandle BlockHandle
 	if b.filterPolicy != nil && len(b.keys) > 0 {
 		filterData := b.filterPolicy.CreateFilter(b.keys)
@@ -159,21 +177,54 @@ func (b *Builder) Close() error {
 		b.metaIndexBlock.Add([]byte(b.filterPolicy.Name()), encodedFilterHandle)
 	}
 
-	// --- Write MetaIndex Block ---
+	// Write meta index block.
 	metaIndexContent := b.metaIndexBlock.Finish()
-	n, err := b.writer.Write(metaIndexContent)
+	// Compress/Wrap MetaIndex
+	compressedMeta := compress(metaIndexContent)
+	var finalMeta []byte
+	var metaType byte
+	if len(compressedMeta) < len(metaIndexContent)-2 {
+		finalMeta = compressedMeta
+		metaType = byte(ZlibCompression)
+	} else {
+		finalMeta = metaIndexContent
+		metaType = byte(NoCompression)
+	}
+
+	n, err := b.writer.Write(finalMeta)
 	if err != nil {
 		return err
 	}
+	if _, err := b.writer.Write([]byte{metaType}); err != nil {
+		return err
+	}
+	n++
+
 	metaIndexHandle := BlockHandle{Offset: b.offset, Length: uint64(n)}
 	b.offset += uint64(n)
 
-	// --- Write Index Block ---
+	// Write meta index block.
 	indexContent := b.indexBlock.Finish()
-	n, err = b.writer.Write(indexContent)
+	// Compress/Wrap Index
+	compressedIndex := compress(indexContent)
+	var finalIndex []byte
+	var indexType byte
+	if len(compressedIndex) < len(indexContent)-2 {
+		finalIndex = compressedIndex
+		indexType = byte(ZlibCompression)
+	} else {
+		finalIndex = indexContent
+		indexType = byte(NoCompression)
+	}
+
+	n, err = b.writer.Write(finalIndex)
 	if err != nil {
 		return err
 	}
+	if _, err := b.writer.Write([]byte{indexType}); err != nil {
+		return err
+	}
+	n++
 
 	indexHandle := BlockHandle{
 		Offset: b.offset,
@@ -181,7 +232,7 @@ func (b *Builder) Close() error {
 	}
 	b.offset += uint64(n)
 
-	// --- Write Footer ---
+	// Footer
 	footer := Footer{
 		MetaindexHandle: metaIndexHandle,
 		IndexHandle:     indexHandle,

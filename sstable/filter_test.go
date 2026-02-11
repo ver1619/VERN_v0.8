@@ -23,7 +23,7 @@ func TestBloomFilterLogic(t *testing.T) {
 		}
 	}
 
-	// Check missing keys (probability of false positive is low but non-zero)
+	// Check missing keys.
 	missing := [][]byte{
 		[]byte("missing"),
 		[]byte("baz"),
@@ -31,12 +31,8 @@ func TestBloomFilterLogic(t *testing.T) {
 	}
 
 	for _, k := range missing {
-		// We can't strict assert false, but mostly likely it is false.
-		// If it's true, it's a false positive.
-		// With 4 keys and 10 bits/key, FP rate is ~1%.
-		// So assume false for test, but be aware.
 		if filter.KeyMayMatch(k, data) {
-			t.Logf("False positive for key %s (expected)", k)
+			t.Logf("False positive for key %s", k)
 		}
 	}
 }
@@ -78,7 +74,6 @@ func TestFilterIntegration(t *testing.T) {
 
 	// Test non-matches
 	if r.MayContain([]byte("missing_key")) {
-		// FP possible but unlikely for this small set
-		t.Log("Potential false positive for 'missing_key'")
+		t.Log("False positive for 'missing_key'")
 	}
 }

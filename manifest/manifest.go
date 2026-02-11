@@ -8,7 +8,6 @@ type Manifest struct {
 	file *os.File
 }
 
-// OpenManifest opens (or creates) the manifest file.
 func OpenManifest(path string) (*Manifest, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
@@ -17,7 +16,6 @@ func OpenManifest(path string) (*Manifest, error) {
 	return &Manifest{file: f}, nil
 }
 
-// Append adds a record and ensures durability.
 func (m *Manifest) Append(rec Record) error {
 	raw, err := EncodeRecord(rec)
 	if err != nil {
@@ -31,7 +29,33 @@ func (m *Manifest) Append(rec Record) error {
 	return m.file.Sync()
 }
 
-// Close closes the manifest.
 func (m *Manifest) Close() error {
 	return m.file.Close()
+}
+
+// Rewrite creates a new manifest.
+func Rewrite(path string, records []Record) error {
+	tmpPath := path + ".tmp"
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	for _, rec := range records {
+		raw, err := EncodeRecord(rec)
+		if err != nil {
+			return err
+		}
+		if _, err := f.Write(raw); err != nil {
+			return err
+		}
+	}
+
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	f.Close()
+
+	return os.Rename(tmpPath, path)
 }

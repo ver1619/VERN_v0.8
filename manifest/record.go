@@ -9,13 +9,13 @@ import (
 
 var ErrInvalidRecord = errors.New("invalid manifest record")
 
-// Record is a decoded manifest entry.
+// Record represents an entry in the manifest.
 type Record struct {
 	Type uint8
 	Data any
 }
 
-// ADD_SSTABLE payload
+// AddSSTable defines the metadata for a new SSTable.
 type AddSSTable struct {
 	FileNum     uint64
 	Level       uint32
@@ -23,14 +23,15 @@ type AddSSTable struct {
 	LargestSeq  uint64
 	SmallestKey []byte
 	LargestKey  []byte
+	FileSize    int64
 }
 
-// REMOVE_SSTABLE payload
+// RemoveSSTable specifies the file number to remove.
 type RemoveSSTable struct {
 	FileNum uint64
 }
 
-// SET_WAL_CUTOFF payload
+// SetWALCutoff defines the sequence threshold for WAL truncation.
 type SetWALCutoff struct {
 	Seq uint64
 }
@@ -52,6 +53,8 @@ func EncodeRecord(rec Record) ([]byte, error) {
 		binary.Write(&payload, binary.LittleEndian, uint32(len(r.LargestKey)))
 		payload.Write(r.LargestKey)
 
+		binary.Write(&payload, binary.LittleEndian, r.FileSize)
+
 	case RecordTypeRemoveSSTable:
 		r := rec.Data.(RemoveSSTable)
 		binary.Write(&payload, binary.LittleEndian, r.FileNum)
@@ -66,14 +69,14 @@ func EncodeRecord(rec Record) ([]byte, error) {
 
 	header := []byte{
 		rec.Type,
-		0, // flags
+		0, // Flags.
 		0, 0,
 	}
 
 	length := uint32(len(header) + payload.Len())
 
 	buf := bytes.NewBuffer(nil)
-	binary.Write(buf, binary.LittleEndian, uint32(0)) // CRC placeholder
+	binary.Write(buf, binary.LittleEndian, uint32(0)) // CRC placeholder.
 	binary.Write(buf, binary.LittleEndian, length)
 	buf.Write(header)
 	buf.Write(payload.Bytes())
@@ -127,6 +130,8 @@ func DecodeRecord(data []byte) (Record, int, error) {
 		binary.Read(rd, binary.LittleEndian, &n)
 		out.LargestKey = make([]byte, n)
 		rd.Read(out.LargestKey)
+
+		binary.Read(rd, binary.LittleEndian, &out.FileSize)
 
 		rec.Data = out
 

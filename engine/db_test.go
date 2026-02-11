@@ -12,12 +12,12 @@ func TestDBPutGetDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Put
+	// Verify Put.
 	if err := db.Put([]byte("a"), []byte("1")); err != nil {
 		t.Fatal(err)
 	}
 
-	// Get
+	// Verify Get.
 	val, err := db.Get([]byte("a"))
 	if err != nil {
 		t.Fatal(err)
@@ -26,12 +26,12 @@ func TestDBPutGetDelete(t *testing.T) {
 		t.Fatalf("unexpected value")
 	}
 
-	// Delete
+	// Verify Delete.
 	if err := db.Delete([]byte("a")); err != nil {
 		t.Fatal(err)
 	}
 
-	// Get after delete
+	// Verify Get returns ErrNotFound after Delete.
 	_, err = db.Get([]byte("a"))
 	if err != ErrNotFound {
 		t.Fatalf("expected not found")
@@ -74,7 +74,7 @@ func TestGetWithSnapshot(t *testing.T) {
 
 	db.Put([]byte("a"), []byte("v2"))
 
-	// Snapshot read must see old value
+	// Snapshot sees old value.
 	val, err := db.GetWithOptions([]byte("a"), &ReadOptions{Snapshot: snap})
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestGetWithSnapshot(t *testing.T) {
 		t.Fatalf("expected v1, got %s", val)
 	}
 
-	// Latest read must see new value
+	// Standard read sees new value.
 	val2, err := db.GetWithOptions([]byte("a"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestSnapshotDeleteVisibility(t *testing.T) {
 
 	db.Delete([]byte("x"))
 
-	// Snapshot must still see value
+	// Snapshot retains deleted value.
 	val, err := db.GetWithOptions([]byte("x"), &ReadOptions{Snapshot: snap})
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestSnapshotDeleteVisibility(t *testing.T) {
 		t.Fatalf("expected value before delete")
 	}
 
-	// Latest read must not see it
+	// Standard read confirms deletion.
 	_, err = db.GetWithOptions([]byte("x"), nil)
 	if err != ErrNotFound {
 		t.Fatalf("expected not found after delete")
@@ -125,10 +125,10 @@ func TestImmutableMemtableReadVisibility(t *testing.T) {
 
 	db.Put([]byte("a"), []byte("1"))
 
-	// Freeze active memtable
+	// Freeze memtable.
 	db.freezeMemtable()
 
-	// New writes go to new memtable
+	// Write to new memtable.
 	db.Put([]byte("b"), []byte("2"))
 
 	v1, err := db.Get([]byte("a"))

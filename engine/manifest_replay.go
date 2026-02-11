@@ -8,12 +8,6 @@ import (
 
 // ReplayManifest rebuilds VersionSet from manifest file.
 func ReplayManifest(path string) (*VersionSet, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -39,6 +33,7 @@ func ReplayManifest(path string) (*VersionSet, error) {
 				LargestSeq:  r.LargestSeq,
 				SmallestKey: r.SmallestKey,
 				LargestKey:  r.LargestKey,
+				FileSize:    r.FileSize,
 			})
 
 		case manifest.RecordTypeRemoveSSTable:

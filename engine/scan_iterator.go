@@ -2,7 +2,7 @@ package engine
 
 import "bytes"
 
-// scanIterator filters keys by user range [start, limit).
+// scanIterator filters keys by range.
 type scanIterator struct {
 	inner  Iterator
 	start  []byte

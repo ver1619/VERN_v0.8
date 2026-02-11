@@ -13,30 +13,18 @@ func TestFlushManual(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer db.Close() // We don't have Close yet but let's assume valid or just ignore
-	// Actually DB struct doesn't have Close method yet in db.go shown previously?
-	// It relies on OS cleanup or we should add one.
-	// Manifest has Close. DB has WAL which has Close.
-	// The Open method shows returning &DB.
+	defer db.Close()
 
-	// Write some data
+	// Write some data and flush.
 	db.Put([]byte("key1"), []byte("value1"))
 	db.Put([]byte("key2"), []byte("value2"))
-
-	// Force flush by freezing
-	// This calls MaybeScheduleFlush which calls flushMemtable
 	db.freezeMemtable()
 
-	// Check if SSTable exists
-	// File num should be 1
+	// Verify SSTable creation.
 	sstPath := filepath.Join(dir, fmt.Sprintf("%06d.sst", 1))
 	if _, err := os.Stat(sstPath); os.IsNotExist(err) {
 		t.Fatalf("SSTable %s not created", sstPath)
 	}
-
-	// Check manifest
-	// We can't easily read internal manifest state without reopening or peeking
-	// Let's reopen and check restored state
 }
 
 func TestFlushRecovery(t *testing.T) {
@@ -48,10 +36,6 @@ func TestFlushRecovery(t *testing.T) {
 		db.Put([]byte("a"), []byte("val1"))
 		db.freezeMemtable() // Flush to 000001.sst
 
-		// DB doesn't have Close method exposed in previous view, let's close manually components if possible
-		// or just rely on Syncs that happen during operations.
-		// manifest.Append does Sync.
-		// wal.Append/Sync does Sync.
 		db.wal.Close()
 		db.manifest.Close()
 	}

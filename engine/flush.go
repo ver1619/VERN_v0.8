@@ -2,15 +2,17 @@ package engine
 
 import (
 	"fmt"
+	"math"
+	"os"
 	"path/filepath"
 
+	"vern_kv0.8/internal"
 	"vern_kv0.8/iterators"
 	"vern_kv0.8/memtable"
 	"vern_kv0.8/sstable"
 )
 
-// flushMemtable flushes a memtable to an SSTable on disk.
-// Returns the metadata for the new table.
+// flushMemtable flushes memtable to disk.
 func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta, error) {
 	filename := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", fileNum))
 
@@ -23,6 +25,8 @@ func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta,
 	it.SeekToFirst()
 
 	var smallest, largest []byte
+	var smallestSeq uint64 = math.MaxUint64
+	var largestSeq uint64
 	var count uint64
 
 	first := true
@@ -35,18 +39,24 @@ func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta,
 			return SSTableMeta{}, err
 		}
 
-		// Track metadata
+		// Update metadata.
 		if first {
 			smallest = make([]byte, len(key))
 			copy(smallest, key)
-			// Track first key as smallest (seq tracking deferred).
 			first = false
 		}
 
 		largest = make([]byte, len(key))
 		copy(largest, key)
 
-		// Seq tracking is TODO for future versions.
+		// Update sequence bounds.
+		seq, _, _ := internal.ExtractTrailer(key)
+		if seq < smallestSeq {
+			smallestSeq = seq
+		}
+		if seq > largestSeq {
+			largestSeq = seq
+		}
 
 		count++
 		it.Next()
@@ -56,11 +66,24 @@ func (db *DB) flushMemtable(mt *memtable.Memtable, fileNum uint64) (SSTableMeta,
 		return SSTableMeta{}, err
 	}
 
-	// For v0.8, we dump everything to Level 0
+	// Determine file size.
+	var fileSize int64
+	if info, err := os.Stat(filename); err == nil {
+		fileSize = info.Size()
+	}
+
+	if count == 0 {
+		smallestSeq = 0
+	}
+
+	// Return L0 metadata.
 	return SSTableMeta{
 		FileNum:     fileNum,
 		Level:       0,
 		SmallestKey: smallest,
 		LargestKey:  largest,
+		SmallestSeq: smallestSeq,
+		LargestSeq:  largestSeq,
+		FileSize:    fileSize,
 	}, nil
 }

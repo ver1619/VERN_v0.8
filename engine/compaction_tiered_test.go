@@ -12,18 +12,9 @@ func TestCompactionL1ToL2(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Manually inject state to simulate L1 having files
-	// This avoids needing effectively infinite writes to trigger it naturally.
+	// Simulate L1 state.
 
-	// 1. Create a dummy SSTable
-	// sstPath := filepath.Join(dir, "000100.sst")
-	// We need a valid SSTable or CompactLevel will fail on Open.
-	// Use flushMemtable to create one?
-	// It's private.
-
-	// Actual strategy:
-	// Just verify that calling CompactLevel(1) returns "nil" (success/no-op)
-	// or specific error if empty, rather than "not supported".
+	// Verify CompactLevel(1) behavior for empty levels.
 
 	err = db.CompactLevel(1)
 	if err != nil {

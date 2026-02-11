@@ -9,7 +9,6 @@ import (
 	"vern_kv0.8/wal"
 )
 
-// RecoveredState contains restored DB state.
 type RecoveredState struct {
 	VersionSet  *VersionSet
 	Memtable    *memtable.Memtable
@@ -17,9 +16,9 @@ type RecoveredState struct {
 	NextFileNum uint64
 }
 
-// Recover performs full crash recovery.
+// Recover restores DB state.
 func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
-	// Manifest replay
+	// Replay manifest.
 	vs, err := ReplayManifest(manifestPath)
 	if err != nil {
 		return nil, err
@@ -28,7 +27,7 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 	// Initialize memtable
 	mt := memtable.New()
 
-	// Determine highest durable sequence number and file number
+	// Determine max sequence and file number.
 	var maxSeq uint64
 	var maxFileNum uint64
 
@@ -44,7 +43,7 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 		maxSeq = vs.WALCutoffSeq
 	}
 
-	// Discover WAL segments
+	// Find WAL files.
 	entries, err := os.ReadDir(walDir)
 	if err != nil {
 		return nil, err
@@ -62,7 +61,7 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 
 	sort.Strings(segments)
 
-	// WAL replay
+	// Replay WAL.
 	for _, path := range segments {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -73,7 +72,7 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 		for offset < len(data) {
 			batch, n, err := wal.DecodeRecord(data[offset:])
 			if err != nil {
-				// HARD STOP on corruption
+				// Stop on corruption.
 				break
 			}
 
@@ -83,7 +82,7 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 				continue
 			}
 
-			// Apply batch atomically
+			// Apply batch.
 			seq := batch.SeqStart
 			for _, r := range batch.Records {
 				ikey := internal.EncodeInternalKey(
@@ -111,7 +110,7 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 	}, nil
 }
 
-// convert WAL logical record type → InternalKey record type
+// convertLogicalType converts WAL type to internal type.
 func convertLogicalType(t uint8) internal.RecordType {
 	switch t {
 	case wal.LogicalTypePut:

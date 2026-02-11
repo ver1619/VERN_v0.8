@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 
 	"sync"
@@ -20,34 +22,37 @@ import (
 
 var ErrNotFound = errors.New("key not found")
 
-const MemtableSizeLimit = 4 * 1024 * 1024 // 4MB
-
-// DB is the main engine handle.
+// DB represents the database instance.
 type DB struct {
 	mu           sync.RWMutex
-	flushMu      sync.Mutex // Serializes flushes
-	compactionMu sync.Mutex // Serializes compactions
+	flushMu      sync.Mutex
+	compactionMu sync.Mutex
 	wal          *wal.WAL
-	memtable     *memtable.Memtable   // active (mutable)
-	immutables   []*memtable.Memtable // frozen (read-only)
+	memtable     *memtable.Memtable
+	immutables   []*memtable.Memtable
 
 	version *VersionSet
 	nextSeq uint64
 	dir     string
+	opts    *Config // Configuration
 
 	manifest    *manifest.Manifest
 	nextFileNum uint64
 	cache       cache.Cache
+
+	bgErr   error      // Background error
+	bgErrMu sync.Mutex // Protects bgErr
 }
 
-//
-// Open / initialization
-//
+// Open initializes and opens the database.
+func Open(dir string, options ...*Config) (*DB, error) {
+	opts := DefaultConfig()
+	if len(options) > 0 && options[0] != nil {
+		opts = options[0]
+	}
 
-// Open opens or creates a database at dir.
-func Open(dir string) (*DB, error) {
 	manifestPath := filepath.Join(dir, "MANIFEST")
-	walDir := filepath.Join(dir, "wal")
+	walDir := filepath.Join(dir, opts.WalDir)
 
 	var state *RecoveredState
 
@@ -95,17 +100,17 @@ func Open(dir string) (*DB, error) {
 		version: state.VersionSet,
 		nextSeq: state.NextSeq,
 		dir:     dir,
+		opts:    opts,
 
 		manifest:    m,
 		nextFileNum: state.NextFileNum + 1,
 	}
 
-	// If fresh, nextFileNum starts at 1
 	if db.nextFileNum == 0 {
 		db.nextFileNum = 1
 	}
 
-	// Consistency Check: Verify SSTables exist
+	// Verify existence of all SSTables.
 	for _, meta := range db.version.GetAllTables() {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
 		if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -114,13 +119,12 @@ func Open(dir string) (*DB, error) {
 		}
 	}
 
-	// Initialize Block Cache (8MB)
+	// Initialize 8MB cache.
 	db.cache = cache.NewLRUCache(8 * 1024 * 1024)
 
 	return db, nil
 }
 
-// Close closes the database.
 func (db *DB) Close() error {
 	if err := db.wal.Close(); err != nil {
 		return err
@@ -130,25 +134,32 @@ func (db *DB) Close() error {
 	return db.manifest.Close()
 }
 
-// cleanupObsoleteFiles deletes SSTable files that are no longer in the VersionSet.
+// cleanupObsoleteFiles deletes unused SSTables.
 func (db *DB) cleanupObsoleteFiles() {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
+	// Identify obsolete files.
+	db.version.mu.RLock()
+	var obsolete []uint64
 	for fileNum := range db.version.Obsolete {
+		obsolete = append(obsolete, fileNum)
+	}
+	db.version.mu.RUnlock()
+
+	// Delete files
+	for _, fileNum := range obsolete {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", fileNum))
-		if err := os.Remove(path); err == nil {
+		if err := os.Remove(path); err == nil || os.IsNotExist(err) {
+			// Remove from obsolete text map on success.
+			db.version.mu.Lock()
 			delete(db.version.Obsolete, fileNum)
+			db.version.mu.Unlock()
 		}
 	}
 }
 
-//
-// Write path
-//
-
-// Put inserts or updates a key.
 func (db *DB) Put(key, value []byte) error {
+	if err := db.checkBackgroundError(); err != nil {
+		return err
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -168,14 +179,16 @@ func (db *DB) Put(key, value []byte) error {
 	if err := db.wal.Append(batch); err != nil {
 		return err
 	}
-	if err := db.wal.Sync(); err != nil {
-		return err
+	if db.opts.SyncWrites {
+		if err := db.wal.Sync(); err != nil {
+			return err
+		}
 	}
 
 	ikey := internal.EncodeInternalKey(key, seq, internal.RecordTypeValue)
 	db.memtable.Insert(ikey, value)
 
-	if db.memtable.ApproximateSize() >= MemtableSizeLimit {
+	if db.memtable.ApproximateSize() >= db.opts.MemtableSizeLimit {
 		db.rotateMemtableLocked()
 		go db.MaybeScheduleFlush()
 	}
@@ -184,23 +197,27 @@ func (db *DB) Put(key, value []byte) error {
 	return nil
 }
 
-// Write applies a batch of operations atomically.
+// Write applies a batch of operations.
 func (db *DB) Write(batch *wal.Batch) error {
+	if err := db.checkBackgroundError(); err != nil {
+		return err
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	// 1. Sequence number assignment
 	batch.SeqStart = db.nextSeq
 
-	// 2. Write to WAL
+	// Write to WAL
 	if err := db.wal.Append(*batch); err != nil {
 		return err
 	}
-	if err := db.wal.Sync(); err != nil {
-		return err
+	if db.opts.SyncWrites {
+		if err := db.wal.Sync(); err != nil {
+			return err
+		}
 	}
 
-	// 3. Write to Memtable
+	// Write to Memtable
 	seq := batch.SeqStart
 	for _, r := range batch.Records {
 		typ := internal.RecordTypeValue
@@ -212,7 +229,7 @@ func (db *DB) Write(batch *wal.Batch) error {
 		seq++
 	}
 
-	if db.memtable.ApproximateSize() >= MemtableSizeLimit {
+	if db.memtable.ApproximateSize() >= db.opts.MemtableSizeLimit {
 		db.rotateMemtableLocked()
 		go db.MaybeScheduleFlush()
 	}
@@ -221,8 +238,10 @@ func (db *DB) Write(batch *wal.Batch) error {
 	return nil
 }
 
-// Delete removes a key by inserting a tombstone.
 func (db *DB) Delete(key []byte) error {
+	if err := db.checkBackgroundError(); err != nil {
+		return err
+	}
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -241,8 +260,10 @@ func (db *DB) Delete(key []byte) error {
 	if err := db.wal.Append(batch); err != nil {
 		return err
 	}
-	if err := db.wal.Sync(); err != nil {
-		return err
+	if db.opts.SyncWrites {
+		if err := db.wal.Sync(); err != nil {
+			return err
+		}
 	}
 
 	ikey := internal.EncodeInternalKey(key, seq, internal.RecordTypeTombstone)
@@ -252,12 +273,10 @@ func (db *DB) Delete(key []byte) error {
 	return nil
 }
 
-//
-// Read path — point lookups
-//
-
-// GetWithOptions returns the value for key using optional read options.
 func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
+	if err := db.checkBackgroundError(); err != nil {
+		return nil, err
+	}
 	db.mu.RLock()
 
 	var iters []iterators.InternalIterator
@@ -284,13 +303,19 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 		iters = append(iters, imIt)
 	}
 
-	// SSTables
-	sstables := db.getSortedCandidatedTables() // Uses VersionSet (safe under RLock)
-
-	// Create iterators for SSTables (IO).
-	// Holds RLock to block conflicting writes/flushes, but allows concurrent reads.
+	// Skip SSTables that don't overlap with the target key.
+	sstables := db.getSortedCandidatedTables()
 
 	for _, meta := range sstables {
+		// Use key range metadata to filter SSTables.
+		if len(meta.SmallestKey) > 0 && len(meta.LargestKey) > 0 {
+			smallestUser := internal.ExtractUserKey(meta.SmallestKey)
+			largestUser := internal.ExtractUserKey(meta.LargestKey)
+			if bytes.Compare(key, smallestUser) < 0 || bytes.Compare(key, largestUser) > 0 {
+				continue // Key out of range.
+			}
+		}
+
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
 		sstIt, err := sstable.NewIterator(path, db.cache)
 		if err != nil {
@@ -305,19 +330,25 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 		iters = append(iters, it)
 	}
 
-	db.mu.RUnlock() // Release lock before iterating
+	db.mu.RUnlock()
 
 	merge := iterators.NewMergeIterator(iters)
 	merge.SeekToFirst()
 
+	// Stop iterating once we pass the target key.
 	for merge.Valid() {
 		userKey := internal.ExtractUserKey(merge.Key())
-		if string(userKey) == string(key) {
+		cmp := bytes.Compare(userKey, key)
+		if cmp == 0 {
 			_, typ, _ := internal.ExtractTrailer(merge.Key())
 			if typ == internal.RecordTypeTombstone {
 				return nil, ErrNotFound
 			}
 			return merge.Value(), nil
+		}
+		if cmp > 0 {
+			// Target key not found.
+			break
 		}
 		merge.Next()
 	}
@@ -325,16 +356,10 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 	return nil, ErrNotFound
 }
 
-// Get preserves v0.5 behavior (latest read).
 func (db *DB) Get(key []byte) ([]byte, error) {
 	return db.GetWithOptions(key, nil)
 }
 
-//
-// Snapshots
-//
-
-// GetSnapshot returns a stable snapshot of the current DB state.
 func (db *DB) GetSnapshot() *Snapshot {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
@@ -343,11 +368,6 @@ func (db *DB) GetSnapshot() *Snapshot {
 	}
 }
 
-//
-// Iteration (snapshot-consistent)
-//
-
-// NewIterator returns a snapshot-consistent iterator.
 func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 	db.mu.RLock()
 
@@ -404,11 +424,9 @@ func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 	}
 }
 
-// getSortedCandidatedTables returns all tables sorted by newness (L0 logic)
+// getSortedCandidatedTables returns tables sorted by file number (descending).
 func (db *DB) getSortedCandidatedTables() []SSTableMeta {
-	// For v0.8, we assume all tables are L0 and overlapping.
-	// Sort by FileNum descending (Newer first).
-
+	// Sort by FileNum descending
 	var metas []SSTableMeta
 	for _, m := range db.version.GetAllTables() {
 		metas = append(metas, m)
@@ -421,11 +439,6 @@ func (db *DB) getSortedCandidatedTables() []SSTableMeta {
 	return metas
 }
 
-//
-// Range / prefix scans
-//
-
-// NewRangeIterator returns an iterator over keys in [start, end).
 func (db *DB) NewRangeIterator(
 	start []byte,
 	end []byte,
@@ -439,7 +452,6 @@ func (db *DB) NewRangeIterator(
 	}
 }
 
-// NewPrefixIterator returns an iterator over keys with the given prefix.
 func (db *DB) NewPrefixIterator(
 	prefix []byte,
 	opts *ReadOptions,
@@ -451,34 +463,35 @@ func (db *DB) NewPrefixIterator(
 	}
 }
 
-//
-// Lifecycle (Phase L1)
-//
-
-// rotateMemtableLocked moves the active memtable into immutables.
-// Caller must hold db.mu.
+// rotateMemtableLocked moves active memtable to immutables.
 func (db *DB) rotateMemtableLocked() {
 	frozen := db.memtable
 	db.immutables = append(db.immutables, frozen)
 	db.memtable = memtable.New()
 }
 
-// freezeMemtable moves the active memtable into immutables
-// and initializes a new active memtable. (Thread-safe wrapper)
+// freezeMemtable rotates the memtable and schedules a flush.
 func (db *DB) freezeMemtable() {
 	db.mu.Lock()
 	db.rotateMemtableLocked()
-	db.mu.Unlock() // Release DB lock before flush
+	db.mu.Unlock()
 
 	db.MaybeScheduleFlush()
 }
 
 func (db *DB) MaybeScheduleFlush() {
-	// Ensure only one flush runs at a time
+
 	db.flushMu.Lock()
 	defer db.flushMu.Unlock()
 
+	defer func() {
+		if r := recover(); r != nil {
+			db.setBackgroundError(fmt.Errorf("panic in flush: %v", r))
+		}
+	}()
+
 	for {
+		runtime.Gosched() // Yield to prevent starvation
 		db.mu.Lock()
 		if len(db.immutables) == 0 {
 			db.mu.Unlock()
@@ -490,17 +503,20 @@ func (db *DB) MaybeScheduleFlush() {
 		db.nextFileNum++
 		db.mu.Unlock()
 
-		// IO without lock
+		// Flush without holding lock.
 		meta, err := db.flushMemtable(im, fileNum)
 		if err != nil {
-			panic(fmt.Sprintf("flush failed: %v", err))
+			db.setBackgroundError(err)
+			return
 		}
 
-		// Commit with lock
+		// Commit
 		db.mu.Lock()
 
 		if err := db.version.AddTable(meta); err != nil {
-			panic(err)
+			db.mu.Unlock()
+			db.setBackgroundError(err)
+			return
 		}
 
 		edit := manifest.Record{
@@ -512,10 +528,13 @@ func (db *DB) MaybeScheduleFlush() {
 				LargestKey:  meta.LargestKey,
 				SmallestSeq: meta.SmallestSeq,
 				LargestSeq:  meta.LargestSeq,
+				FileSize:    meta.FileSize,
 			},
 		}
 		if err := db.manifest.Append(edit); err != nil {
-			panic(err)
+			db.mu.Unlock()
+			db.setBackgroundError(err)
+			return
 		}
 
 		cutOffEdit := manifest.Record{
@@ -523,12 +542,20 @@ func (db *DB) MaybeScheduleFlush() {
 			Data: manifest.SetWALCutoff{Seq: meta.LargestSeq},
 		}
 		if err := db.manifest.Append(cutOffEdit); err != nil {
-			panic(err)
+			db.mu.Unlock()
+			db.setBackgroundError(err)
+			return
 		}
 		db.version.SetWALCutoff(meta.LargestSeq)
 
 		db.immutables = db.immutables[1:]
 		db.mu.Unlock()
+
+		// Truncate old WAL segments.
+		if meta.LargestSeq > 0 {
+			walDir := filepath.Join(db.dir, db.opts.WalDir)
+			wal.Truncate(walDir, meta.LargestSeq)
+		}
 	}
 
 	// Trigger compaction if needed
@@ -536,4 +563,74 @@ func (db *DB) MaybeScheduleFlush() {
 
 	// Reclaim space
 	db.cleanupObsoleteFiles()
+}
+
+func (db *DB) setBackgroundError(err error) {
+	db.bgErrMu.Lock()
+	defer db.bgErrMu.Unlock()
+	if db.bgErr == nil {
+		db.bgErr = err
+	}
+}
+
+func (db *DB) checkBackgroundError() error {
+	db.bgErrMu.Lock()
+	defer db.bgErrMu.Unlock()
+	return db.bgErr
+}
+
+// CompactManifest rewrites the manifest.
+func (db *DB) CompactManifest() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// Snapshot current state
+	var records []manifest.Record
+
+	// Tables
+	for _, meta := range db.version.GetAllTables() {
+		records = append(records, manifest.Record{
+			Type: manifest.RecordTypeAddSSTable,
+			Data: manifest.AddSSTable{
+				FileNum:     meta.FileNum,
+				Level:       meta.Level,
+				SmallestKey: meta.SmallestKey,
+				LargestKey:  meta.LargestKey,
+				SmallestSeq: meta.SmallestSeq,
+				LargestSeq:  meta.LargestSeq,
+				FileSize:    meta.FileSize,
+			},
+		})
+	}
+
+	// WAL Cutoff
+	records = append(records, manifest.Record{
+		Type: manifest.RecordTypeSetWALCutoff,
+		Data: manifest.SetWALCutoff{Seq: db.version.WALCutoffSeq},
+	})
+
+	// Rewrite
+	manifestPath := filepath.Join(db.dir, "MANIFEST")
+
+	if err := db.manifest.Close(); err != nil {
+		return err
+	}
+
+	if err := manifest.Rewrite(manifestPath, records); err != nil {
+		// Attempt to reopen existing manifest if rewrite fails.
+		m, reopenErr := manifest.OpenManifest(manifestPath)
+		if reopenErr == nil {
+			db.manifest = m
+		}
+		return err
+	}
+
+	// Reopen
+	m, err := manifest.OpenManifest(manifestPath)
+	if err != nil {
+		return err
+	}
+	db.manifest = m
+
+	return nil
 }

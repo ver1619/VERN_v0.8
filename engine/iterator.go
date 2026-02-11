@@ -5,7 +5,7 @@ import (
 	"vern_kv0.8/iterators"
 )
 
-// Iterator is a snapshot-consistent user-facing iterator.
+// Iterator is a user-facing iterator.
 type Iterator interface {
 	SeekToFirst()
 	Next()
@@ -43,7 +43,7 @@ func (it *dbIterator) Valid() bool {
 	return it.inner.Valid()
 }
 
-// Key returns the USER KEY (not InternalKey).
+// Key returns user key.
 func (it *dbIterator) Key() []byte {
 	return internal.ExtractUserKey(it.inner.Key())
 }

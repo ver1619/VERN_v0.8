@@ -17,7 +17,7 @@ func TestConcurrencySWMR(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	// Writer
+	// Writer routine.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -28,18 +28,14 @@ func TestConcurrencySWMR(t *testing.T) {
 				t.Errorf("Put failed: %v", err)
 			}
 
-			// Occasionally flush manually to force rotation?
-			// But Put triggers flush if memtable full (not implemented yet, we rely on freezeMemtable called manually or by size).
-			// v0.8 memtable size trigger is not in `Put` yet (Wait, did I add it? No, plan said Manual/Auto Trigger mostly Manual in tests).
-			// If `Put` doesn't auto-flush, memtable grows indefinitely.
-			// Let's add explicit flush trigger every 100 writes.
+			// Flush memtable periodically.
 			if i%100 == 0 {
 				db.freezeMemtable()
 			}
 		}
 	}()
 
-	// Readers
+	// Reader routines.
 	for r := 0; r < 5; r++ {
 		wg.Add(1)
 		go func(rid int) {
@@ -48,13 +44,7 @@ func TestConcurrencySWMR(t *testing.T) {
 				// Random delay
 				time.Sleep(1 * time.Millisecond)
 
-				// Read a key that might exist
-				// concurrency is nondeterministic, so we just check for errors/panics
-				// or consistency if we know what to expect.
-				// Here we just ensure NO RACES (go test -race).
-
-				// We can try to read keys written by writer.
-				// Snapshots
+				// Verify concurrent snapshot iteration.
 				snap := db.GetSnapshot()
 				iter := db.NewIterator(&ReadOptions{Snapshot: snap})
 				iter.SeekToFirst()

@@ -13,7 +13,7 @@ func TestFullRecovery(t *testing.T) {
 	manifestPath := filepath.Join(dir, "MANIFEST")
 	walDir := filepath.Join(dir, "wal")
 
-	// ---- Write manifest ----
+	// Write manifest.
 	m, _ := manifest.OpenManifest(manifestPath)
 	m.Append(manifest.Record{
 		Type: manifest.RecordTypeSetWALCutoff,
@@ -21,7 +21,7 @@ func TestFullRecovery(t *testing.T) {
 	})
 	m.Close()
 
-	// ---- Write WAL ----
+	// Write WAL.
 	w, _ := wal.OpenWAL(walDir, 1024)
 	w.Append(wal.Batch{
 		SeqStart: 1,
@@ -33,7 +33,7 @@ func TestFullRecovery(t *testing.T) {
 	w.Sync()
 	w.Close()
 
-	// ---- Recover ----
+	// Recover state.
 	state, err := Recover(manifestPath, walDir)
 	if err != nil {
 		t.Fatal(err)

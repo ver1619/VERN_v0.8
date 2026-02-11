@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestCompactionL0toL1(t *testing.T) {
@@ -13,31 +14,35 @@ func TestCompactionL0toL1(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Create 5 SSTables in L0
-	// By flushing 5 memtables
+	// Create 5 L0 SSTables by flushing memtables.
 	for i := 0; i < 5; i++ {
 		key := []byte(fmt.Sprintf("key%d", i))
 		val := []byte(fmt.Sprintf("val%d-v1", i))
 		db.Put(key, val)
 
-		// Add an overwrite for key0 in the last file to check precedence
+		// Overwrite key0 to verify version precedence.
 		if i == 4 {
 			db.Put([]byte("key0"), []byte("val0-updated"))
 		}
 
-		db.freezeMemtable() // Force flush -> new L0 file
+		db.freezeMemtable()
 	}
 
-	// Check L0/L1 state
-	// Threshold = 4 (len >= 4).
-	// 4th flush triggers compaction. L0 becomes 0, L1 becomes 1.
-	// 5th flush adds one more file to L0.
-	// So L0 should be 1 and L1 should be 1.
-	if len(db.version.Levels[0]) != 1 {
-		t.Errorf("Expected 1 L0 file (after auto-compaction + 1 new), got %d", len(db.version.Levels[0]))
+	// Verify background compaction reduces L0 and populates L1.
+	var l0, l1 int
+	for i := 0; i < 50; i++ {
+		db.mu.RLock()
+		l0 = len(db.version.Levels[0])
+		l1 = len(db.version.Levels[1])
+		db.mu.RUnlock()
+		if l0 == 1 && l1 == 1 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	if len(db.version.Levels[1]) != 1 {
-		t.Errorf("Expected 1 L1 file, got %d", len(db.version.Levels[1]))
+
+	if l0 != 1 || l1 != 1 {
+		t.Errorf("Timeout waiting for compaction: L0=%d, L1=%d (want 1, 1)", l0, l1)
 	}
 
 	// Data should still be valid

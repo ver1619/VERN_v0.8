@@ -2,6 +2,8 @@ package engine
 
 import (
 	"fmt"
+	"math"
+	"os"
 	"path/filepath"
 
 	"vern_kv0.8/internal"
@@ -10,26 +12,23 @@ import (
 	"vern_kv0.8/sstable"
 )
 
-// PickCompactionSimple picks a compaction.
-// Uses logic from VersionSet (which was updated to provide simple picking).
+// PickCompaction picks a compaction.
 func (db *DB) PickCompaction() (int, bool) {
-	return db.version.PickCompactionSimple()
+	return db.version.PickCompaction(db.opts.L0CompactionTrigger, db.opts.L1MaxBytes)
 }
 
-// CompactLevel executes compaction.
-// L0 -> L1: merge all L0 + overlaps.
-// L1+ -> L+1: pick one file + overlaps.
+// CompactLevel executes compaction logic.
 func (db *DB) CompactLevel(level int) error {
 	if level >= NumLevels-1 {
 		return fmt.Errorf("cannot compact max level")
 	}
 
-	// 1. Pick inputs under lock
+	// Select inputs while holding lock.
 	db.mu.Lock()
 	var inputs []SSTableMeta
 
 	if level == 0 {
-		// L0 compaction strategy stays same: compact all L0 + all L1 into L1
+		// L0 compaction strategy.
 		l0 := db.version.Levels[0]
 		if len(l0) == 0 {
 			db.mu.Unlock()
@@ -40,16 +39,16 @@ func (db *DB) CompactLevel(level int) error {
 		inputs = append(inputs, l0...)
 		inputs = append(inputs, l1...)
 	} else {
-		// L1+ strategy: Pick ONE file from current level
+		// L1+ compaction strategy.
 		currentLevel := db.version.Levels[level]
 		if len(currentLevel) == 0 {
 			db.mu.Unlock()
 			return nil
 		}
-		picked := currentLevel[0] // Simple policy: pick first
+		picked := currentLevel[0]
 		inputs = append(inputs, picked)
 
-		// Pick overlaps from next level
+		// Include overlapping files from next level.
 		overlaps := db.version.GetOverlappingInputs(level+1, picked.SmallestKey, picked.LargestKey)
 		inputs = append(inputs, overlaps...)
 	}
@@ -58,7 +57,7 @@ func (db *DB) CompactLevel(level int) error {
 	db.nextFileNum++
 	db.mu.Unlock()
 
-	// 2. Create Iterator
+	// Create iterators.
 	var iters []iterators.InternalIterator
 	for _, meta := range inputs {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
@@ -72,10 +71,7 @@ func (db *DB) CompactLevel(level int) error {
 	merge := iterators.NewMergeIterator(iters)
 	merge.SeekToFirst()
 
-	// 3. Write output(s)
-	// We might produce multiple files if size > limit.
-
-	// Determine target level
+	// Target level
 	targetLevel := level + 1
 	if level == 0 {
 		targetLevel = 1
@@ -89,7 +85,10 @@ func (db *DB) CompactLevel(level int) error {
 	}
 
 	var smallest, largest []byte
+	var smallestSeq uint64 = math.MaxUint64
+	var largestSeq uint64
 	first := true
+	var count uint64
 
 	for merge.Valid() {
 		key := merge.Key()
@@ -97,13 +96,12 @@ func (db *DB) CompactLevel(level int) error {
 
 		_, typ, _ := internal.ExtractTrailer(key)
 
-		// Tombstone GC:
-		// Drop tombstones if L2+ levels are empty (safe bottom-level GC).
+		// Garbage collect tombstones.
 		if typ == internal.RecordTypeTombstone {
 			isBottom := true
 			for l := targetLevel + 1; l < NumLevels; l++ {
 				if len(db.version.Levels[l]) > 0 {
-					// Skip overlap check for v0.8 (conservative approach).
+					// Skip overlap check.
 					isBottom = false
 					break
 				}
@@ -126,14 +124,34 @@ func (db *DB) CompactLevel(level int) error {
 		largest = make([]byte, len(key))
 		copy(largest, key)
 
+		// Track seq bounds
+		seq, _, _ := internal.ExtractTrailer(key)
+		if seq < smallestSeq {
+			smallestSeq = seq
+		}
+		if seq > largestSeq {
+			largestSeq = seq
+		}
+
+		count++
 		merge.Next()
+	}
+
+	if count == 0 {
+		smallestSeq = 0
 	}
 
 	if err := builder.Close(); err != nil {
 		return err
 	}
 
-	// 4. Update Versions under lock
+	// Get actual file size
+	var fileSize int64
+	if info, err := os.Stat(filename); err == nil {
+		fileSize = info.Size()
+	}
+
+	// Update version set.
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -143,9 +161,12 @@ func (db *DB) CompactLevel(level int) error {
 		Level:       uint32(targetLevel),
 		SmallestKey: smallest,
 		LargestKey:  largest,
+		SmallestSeq: smallestSeq,
+		LargestSeq:  largestSeq,
+		FileSize:    fileSize,
 	}
 
-	// Log deletions
+	// Record deletions.
 	for _, in := range inputs {
 		edit := manifest.Record{
 			Type: manifest.RecordTypeRemoveSSTable,
@@ -157,7 +178,7 @@ func (db *DB) CompactLevel(level int) error {
 		db.version.RemoveTable(in.FileNum)
 	}
 
-	// Log addition
+	// Record addition.
 	edit := manifest.Record{
 		Type: manifest.RecordTypeAddSSTable,
 		Data: manifest.AddSSTable{
@@ -165,6 +186,9 @@ func (db *DB) CompactLevel(level int) error {
 			Level:       newMeta.Level,
 			SmallestKey: newMeta.SmallestKey,
 			LargestKey:  newMeta.LargestKey,
+			SmallestSeq: newMeta.SmallestSeq,
+			LargestSeq:  newMeta.LargestSeq,
+			FileSize:    newMeta.FileSize,
 		},
 	}
 	if err := db.manifest.Append(edit); err != nil {

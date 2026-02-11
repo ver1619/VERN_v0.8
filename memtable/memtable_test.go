@@ -30,7 +30,9 @@ func TestMemtableOrderingByUserKey(t *testing.T) {
 	mt.Insert(kb, []byte("b"))
 	mt.Insert(ka, []byte("a"))
 
-	if string(mt.entries[0].key[:1]) != "a" {
+	it := mt.Iterator()
+	it.SeekToFirst()
+	if string(it.Key()[:1]) != "a" {
 		t.Fatalf("expected key 'a' first")
 	}
 }
@@ -44,7 +46,9 @@ func TestMemtableOrderingBySequenceDesc(t *testing.T) {
 	mt.Insert(k1, []byte("old"))
 	mt.Insert(k2, []byte("new"))
 
-	seq, _, _ := internal.ExtractTrailer(mt.entries[0].key)
+	it := mt.Iterator()
+	it.SeekToFirst()
+	seq, _, _ := internal.ExtractTrailer(it.Key())
 	if seq != 2 {
 		t.Fatalf("expected newer sequence first")
 	}

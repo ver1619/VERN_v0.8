@@ -12,9 +12,12 @@ func TestRecoveryIsDeterministic(t *testing.T) {
 	db, _ := engine.Open(dir)
 	db.Put([]byte("x"), []byte("1"))
 	db.Put([]byte("y"), []byte("2"))
+	db.Close()
 
 	db1, _ := engine.Open(dir)
+	defer db1.Close()
 	db2, _ := engine.Open(dir)
+	defer db2.Close()
 
 	v1, _ := db1.Get([]byte("x"))
 	v2, _ := db2.Get([]byte("x"))

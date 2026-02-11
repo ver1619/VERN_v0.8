@@ -18,8 +18,7 @@ func TestAutoFlushKeyTrigger(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Memtable limit is 4MB. Write ~4.5MB.
-	// 1KB per entry -> 4500 entries.
+	// Fill memtable to trigger auto-flush.
 	val := make([]byte, 1000)
 	for i := 0; i < 4500; i++ {
 		key := []byte(fmt.Sprintf("k%09d", i))
@@ -28,7 +27,7 @@ func TestAutoFlushKeyTrigger(t *testing.T) {
 		}
 	}
 
-	// Give async flush time to run
+	// Wait for background flush.
 	time.Sleep(2 * time.Second)
 
 	// Check for SST files
@@ -45,6 +44,6 @@ func TestAutoFlushKeyTrigger(t *testing.T) {
 	}
 
 	if sstCount == 0 {
-		t.Fatalf("Expected auto-flush to create SST files, found 0. Memory growth fix failed.")
+		t.Fatalf("Expected auto-flush to create SST files")
 	}
 }

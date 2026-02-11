@@ -20,10 +20,6 @@ func TestCrashConsistency(t *testing.T) {
 		db.Put([]byte(fmt.Sprintf("p-%d", i)), []byte("data"))
 	}
 
-	// Simulate "hard" close (no manifest/WAL finish sequence if we were doing something complex)
-	// But current engine.Close is simple.
-	// Real crash test would be killing the process, but here we just Close and re-open
-	// and ensure all durable Puts (which are sync in v0.8) are back.
 	db.Close()
 
 	db, err = engine.Open(dir)

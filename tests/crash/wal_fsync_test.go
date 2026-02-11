@@ -19,14 +19,13 @@ func TestCrashBeforeWALFsync(t *testing.T) {
 	)
 	_ = cmd.Run() // expected SIGKILL
 
-	// Restart engine — MUST NOT crash
+	// Restart engine and verify consistency.
 	db, err := engine.Open(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Key MAY or MAY NOT exist.
-	// If it exists, it must be correct.
+	// Verify that if the key exists, its value is correct.
 	val, err := db.Get([]byte("a"))
 	if err == nil && string(val) != "1" {
 		t.Fatalf("corrupted value after crash before fsync")

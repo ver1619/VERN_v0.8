@@ -1,5 +1,8 @@
-# Tests v0.8
+# Tests Report v0.8
 
+**This report provides a detailed breakdown of the 35 test files**
+
+## Test Results
 ```python
 === RUN   TestCompactionL0toL1
 --- PASS: TestCompactionL0toL1 (0.24s)
@@ -179,3 +182,103 @@ ok      vern_kv0.8/tests/integration    36.393s
 PASS
 ok      vern_kv0.8/wal  0.156s
 ```
+
+---
+
+## Report
+
+## Engine Tests
+
+| Test File | Description |
+|-----------|------------|
+| `engine/compaction_test.go` | Validates L0 → L1 compaction logic and version precedence handling. |
+| `engine/compaction_tiered_test.go` | Validates tiered compaction strategy (L1 → L2). |
+| `engine/concurrency_test.go` | Verifies Single Writer Multiple Reader (SWMR) semantics and snapshot isolation under concurrent load. |
+| `engine/db_test.go` | Tests core database operations: Put, Get, Delete, recovery, snapshots, and immutable memtable visibility. |
+| `engine/flush_test.go` | Tests manual flush operations and post-flush recovery. |
+| `engine/full_cycle_test.go` | Validates complete data lifecycle: Write → Flush → Read → Recover. |
+| `engine/iterator_test.go` | Tests iterator semantics, including snapshot visibility and deleted key handling. |
+| `engine/recovery_test.go` | Validates recovery from MANIFEST and WAL files. |
+| `engine/scan_iterator_test.go` | Tests range scan and prefix scan functionality. |
+| `engine/snapshot_test.go` | Validates snapshot creation, sequence capture, and immutability guarantees. |
+| `engine/version_set_test.go` | Tests version set management: table add/remove, compaction selection, and overlap resolution. |
+
+## Internal Tests
+
+| Test File | Description |
+|-----------|------------|
+| `internal/cache/cache_test.go` | Tests LRU cache behavior: basic operations, overwrite handling, eviction policy, large item handling, and concurrency safety. |
+| `internal/internal_key_test.go` | Validates internal key encoding/decoding, user key extraction, and comparator ordering semantics. |
+
+## Iterator Tests
+
+| Test File | Description |
+|-----------|------------|
+| `iterators/iterator_test.go` | Tests merging iterators (Memtable + SSTable) and version-based visibility filtering logic. |
+
+## Manifest Tests
+
+| Test File | Description |
+|-----------|------------|
+| `manifest/manifest_test.go` | Validates MANIFEST operations: append, decode, and corruption detection mechanisms. |
+
+## Memtable Tests
+
+| Test File | Description |
+|-----------|------------|
+| `memtable/memtable_test.go` | Tests memtable operations: insert, size tracking, internal key ordering, and tombstone handling. |
+| `memtable/skiplist_test.go` | Validates skiplist behavior: insert, iteration, duplicate updates, and ordering guarantees. |
+
+## SSTable Tests
+
+| Test File | Description |
+|-----------|------------|
+| `sstable/block_test.go` | Tests SSTable block construction and in-block seek functionality. |
+| `sstable/compression_test.go` | Validates compression and decompression primitives. |
+| `sstable/filter_test.go` | Tests Bloom filter creation, membership checks, and SSTable integration. |
+| `sstable/full_test.go` | Validates end-to-end SSTable build and read paths (Scan, Seek). |
+| `sstable/sstable_test.go` | Tests core SSTable iterator functionality. |
+
+
+## WAL Tests
+
+| Test File | Description |
+|-----------|------------|
+| `wal/record_test.go` | Tests WAL record batch encoding/decoding and CRC validation. |
+| `wal/segment_test.go` | Validates WAL segment lifecycle: append, sync, open, and close operations. |
+| `wal/truncation_test.go` | Tests WAL truncation logic and boundary handling. |
+| `wal/wal_test.go` | Validates WAL log rotation and reopen semantics. |
+
+
+## System & Crash Tests
+
+| Test File | Description |
+|-----------|------------|
+| `tests/crash/crash_test.go` | Verifies data consistency after a simulated crash and restart. |
+| `tests/crash/recovery_test.go` | Ensures deterministic recovery (identical state across repeated recoveries). |
+| `tests/crash/truncation_test.go` | Validates truncation idempotence and data persistence after restart. |
+| `tests/crash/wal_fsync_test.go` | Tests crash consistency behavior before WAL fsync (via external process simulation). |
+
+
+## Determinism & Integration Tests
+
+| Test File | Description |
+|-----------|------------|
+| `tests/determinism/replay_repeatability_test.go` | Ensures that replaying database operations produces identical results across runs. |
+| `tests/integration/flush_main_test.go` | Tests automatic flush triggering based on key count or size thresholds. |
+| `tests/integration/full_test.go` | Comprehensive integration test: Put, batch writes, deletes, and recovery. |
+| `tests/integration/open_put_get_test.go` | Verifies persistence across Open → Put → Close → Open → Get cycle. |
+| `tests/manifest_test.go` | Tests manifest compaction (rewrite) logic. |
+
+
+---
+
+
+## Summary
+
+**Total Test Files :** 35<br>
+**Test Categories :**<br>
+- **Unit Tests** : Low-level tests for specific packages (engine, sstable, wal, etc.)
+- **Integration Tests** : Ensuring components work together (engine level).
+- **System & Crash/Recovery Tests** : Verifying system stability and data consistency after crashes.
+- **Determinism & Integration Tests** : Validates deterministic behavior and thread-safety under concurrent execution.

@@ -15,7 +15,7 @@ const (
 	LogicalTypeDelete  uint8 = 0x02
 )
 
-// WAL manages multiple WAL segments.
+// WAL manages write-ahead log segments.
 type WAL struct {
 	mu           sync.Mutex
 	dir          string
@@ -25,7 +25,6 @@ type WAL struct {
 	segments     map[uint64]*Segment
 }
 
-// OpenWAL opens or creates a WAL in dir.
 func OpenWAL(dir string, maxSegmentSize int64) (*WAL, error) {
 	if maxSegmentSize <= 0 {
 		maxSegmentSize = defaultSegmentSize
@@ -54,7 +53,7 @@ func OpenWAL(dir string, maxSegmentSize int64) (*WAL, error) {
 	return w, nil
 }
 
-// Append appends a batch atomically to the WAL.
+// Append writes a batch to the log.
 func (w *WAL) Append(batch Batch) error {
 	record, err := EncodeRecord(batch)
 	if err != nil {
@@ -74,7 +73,6 @@ func (w *WAL) Append(batch Batch) error {
 	return w.active.Append(record)
 }
 
-// Sync fsyncs the active segment.
 func (w *WAL) Sync() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -82,7 +80,6 @@ func (w *WAL) Sync() error {
 	return w.active.Sync()
 }
 
-// Close fsyncs and closes all segments.
 func (w *WAL) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -95,7 +92,7 @@ func (w *WAL) Close() error {
 	return nil
 }
 
-// Segments returns all WAL segment file paths in order.
+// Segments returns sorted paths of WAL files.
 func (w *WAL) Segments() []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -178,5 +175,5 @@ func IsWALFile(name string) bool {
 }
 
 func PathJoin(dir, name string) string {
-	return dir + "/" + name
+	return filepath.Join(dir, name)
 }

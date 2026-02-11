@@ -18,20 +18,19 @@ var (
 	errInvalidRecord = errors.New("invalid wal record")
 )
 
-// LogicalRecord represents a single record (PUT or DELETE).
+// LogicalRecord represents a PUT or DELETE operation.
 type LogicalRecord struct {
 	Key   []byte
 	Value []byte
-	Type  uint8 // Put (1) or Delete (2)
+	Type  uint8 // Operation type.
 }
 
-// Batch represents an atomic WAL batch.
+// Batch represents an atomic update.
 type Batch struct {
 	SeqStart uint64
 	Records  []LogicalRecord
 }
 
-// EncodeRecord encodes a batch into a WAL record.
 func EncodeRecord(batch Batch) ([]byte, error) {
 	if len(batch.Records) == 0 {
 		return nil, errors.New("empty batch")
@@ -65,15 +64,15 @@ func EncodeRecord(batch Batch) ([]byte, error) {
 
 	header := make([]byte, 16)
 	header[0] = recordTypeWriteBatch
-	header[1] = 0 // flags
+	header[1] = 0 // Flags.
 	binary.LittleEndian.PutUint64(header[4:], batch.SeqStart)
 	binary.LittleEndian.PutUint32(header[12:], uint32(len(batch.Records)))
 
 	length := uint32(len(header) + payload.Len())
 
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, uint32(0)) // CRC placeholder
-	binary.Write(&buf, binary.LittleEndian, length)    // Total length
+	binary.Write(&buf, binary.LittleEndian, uint32(0)) // CRC placeholder.
+	binary.Write(&buf, binary.LittleEndian, length)    // Total length.
 	buf.Write(header)
 	buf.Write(payload.Bytes())
 
@@ -85,7 +84,6 @@ func EncodeRecord(batch Batch) ([]byte, error) {
 	return raw, nil
 }
 
-// DecodeRecord decodes a WAL record and validates CRC.
 func DecodeRecord(data []byte) (Batch, int, error) {
 	if len(data) < 4+4+16 {
 		return Batch{}, 0, errInvalidRecord

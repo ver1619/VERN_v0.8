@@ -27,7 +27,13 @@ func Truncate(walDir string, cutoffSeq uint64) error {
 
 	var deletable []string
 
-	for _, path := range segments {
+	for i, path := range segments {
+		// Always preserve the last (active) segment to avoid
+		// deleting a file the WAL handle is still writing
+		if i == len(segments)-1 {
+			break
+		}
+
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err

@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// LRUCache implements a simple LRU cache.
+// LRUCache implements Cache.
 type LRUCache struct {
 	mu       sync.Mutex
 	capacity int
@@ -20,7 +20,6 @@ type entry struct {
 	size  int
 }
 
-// NewLRUCache creates a new LRU cache with the given capacity in bytes.
 func NewLRUCache(capacity int) *LRUCache {
 	return &LRUCache{
 		capacity: capacity,
@@ -44,7 +43,7 @@ func (c *LRUCache) Put(key string, value []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// If exists, update
+	// Update existing
 	if elem, ok := c.items[key]; ok {
 		c.list.MoveToFront(elem)
 		ent := elem.Value.(*entry)
@@ -56,7 +55,6 @@ func (c *LRUCache) Put(key string, value []byte) {
 		return
 	}
 
-	// Insert
 	size := len(value)
 	ent := &entry{key: key, value: value, size: size}
 	elem := c.list.PushFront(ent)

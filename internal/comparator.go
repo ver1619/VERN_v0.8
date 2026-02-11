@@ -4,11 +4,9 @@ import "bytes"
 
 type Comparator struct{}
 
-// InternalKeyComparator sorts InternalKeys.
-// Order: Key Ascending, Sequence Descending.
-// Returns: -1 if a < b, 0 if a == b, +1 if a > b
+// Comparator sorts keys in ascending order and sequences in descending order.
 func (Comparator) Compare(a, b []byte) int {
-	// 1. Compare user keys
+	// Compare user keys.
 	ua := ExtractUserKey(a)
 	ub := ExtractUserKey(b)
 
@@ -16,7 +14,7 @@ func (Comparator) Compare(a, b []byte) int {
 		return c
 	}
 
-	// 2. Same user key → compare sequence DESCENDING
+	// Same user key: compare sequence numbers (descending).
 	aseq, atype, _ := ExtractTrailer(a)
 	bseq, btype, _ := ExtractTrailer(b)
 
@@ -27,7 +25,7 @@ func (Comparator) Compare(a, b []byte) int {
 		return 1
 	}
 
-	// 3. Same seq → compare record type ASCENDING
+	// Same sequence: compare types (ascending).
 	if atype < btype {
 		return -1
 	}

@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-// RecordType represents the kind of record stored.
+// RecordType defines the type of database record.
 type RecordType uint8
 
 const (
@@ -13,15 +13,13 @@ const (
 	RecordTypeTombstone RecordType = 0x02
 )
 
-// InternalKey combines UserKey and SequenceNumber/Type.
-// Layout: [ UserKey | Seq (7 bytes) | Type (1 byte) ]
+// InternalKey comprises the user key, sequence number, and record type.
 type InternalKey struct {
 	UserKey []byte
 	Seq     uint64
 	Type    RecordType
 }
 
-// EncodeInternalKey packs userKey, seq, and type.
 func EncodeInternalKey(userKey []byte, seq uint64, typ RecordType) []byte {
 	if seq>>56 != 0 {
 		panic("sequence number exceeds 56 bits")
@@ -36,7 +34,6 @@ func EncodeInternalKey(userKey []byte, seq uint64, typ RecordType) []byte {
 	return buf
 }
 
-// DecodeInternalKey decodes an InternalKey from raw bytes.
 func DecodeInternalKey(b []byte) (InternalKey, error) {
 	if len(b) < 8 {
 		return InternalKey{}, errors.New("internal key too short")
@@ -61,7 +58,6 @@ func DecodeInternalKey(b []byte) (InternalKey, error) {
 	}, nil
 }
 
-// ExtractUserKey splits the user key from the trailer.
 func ExtractUserKey(b []byte) []byte {
 	if len(b) < 8 {
 		return nil
@@ -69,7 +65,6 @@ func ExtractUserKey(b []byte) []byte {
 	return b[:len(b)-8]
 }
 
-// ExtractTrailer parses sequence and type.
 func ExtractTrailer(b []byte) (uint64, RecordType, error) {
 	if len(b) < 8 {
 		return 0, 0, errors.New("invalid internal key")

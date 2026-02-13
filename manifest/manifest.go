@@ -4,10 +4,12 @@ import (
 	"os"
 )
 
+// Manifest tracks DB state changes.
 type Manifest struct {
 	file *os.File
 }
 
+// OpenManifest opens or creates a manifest file.
 func OpenManifest(path string) (*Manifest, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
@@ -16,6 +18,7 @@ func OpenManifest(path string) (*Manifest, error) {
 	return &Manifest{file: f}, nil
 }
 
+// Append writes a record.
 func (m *Manifest) Append(rec Record) error {
 	raw, err := EncodeRecord(rec)
 	if err != nil {
@@ -29,11 +32,12 @@ func (m *Manifest) Append(rec Record) error {
 	return m.file.Sync()
 }
 
+// Close closes the manifest.
 func (m *Manifest) Close() error {
 	return m.file.Close()
 }
 
-// Rewrite creates a new manifest.
+// Rewrite creates a new manifest with current state.
 func Rewrite(path string, records []Record) error {
 	tmpPath := path + ".tmp"
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)

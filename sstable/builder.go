@@ -1,29 +1,35 @@
 package sstable
 
 import (
-	"io"
+	"bufio"
+	"encoding/binary"
+	"fmt"
+	"hash/crc32"
 	"os"
+	"path/filepath"
+
+	"vern_kv0.8/internal"
 )
 
-// Builder constructs SSTables.
+// Builder writes SSTables.
 type Builder struct {
-	file       *os.File
-	writer     io.Writer
-	dataBlock  *BlockBuilder
-	indexBlock *BlockBuilder
-
+	file           *os.File
+	writer         *bufio.Writer
+	dataBlock      *BlockBuilder
+	indexBlock     *BlockBuilder
 	metaIndexBlock *BlockBuilder
 
+	offset            uint64
+	numEntries        uint64
+	closed            bool
+	lastKey           []byte
 	pendingIndexEntry bool
 	pendingHandle     BlockHandle
-	lastKey           []byte
+	err               error
 
-	offset uint64
-	err    error
-
-	// Filter support
+	// Filter support.
 	filterPolicy FilterPolicy
-	keys         [][]byte // Accumulate all keys for the table-wide filter
+	keys         [][]byte
 }
 
 const (
@@ -31,6 +37,10 @@ const (
 )
 
 func NewBuilder(filename string) (*Builder, error) {
+	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+		return nil, err
+	}
+
 	f, err := os.Create(filename)
 	if err != nil {
 		return nil, err
@@ -38,43 +48,48 @@ func NewBuilder(filename string) (*Builder, error) {
 
 	return &Builder{
 		file:           f,
-		writer:         f,
+		writer:         bufio.NewWriter(f),
 		dataBlock:      NewBlockBuilder(),
 		indexBlock:     NewBlockBuilder(),
 		metaIndexBlock: NewBlockBuilder(),
-		filterPolicy:   NewBloomFilter(10), // Default 10 bits per key
+		filterPolicy:   NewBloomFilter(10),
 		keys:           make([][]byte, 0, 1024),
 	}, nil
 }
 
+// Add appends a key-value pair.
 func (b *Builder) Add(key, value []byte) error {
 	if b.err != nil {
 		return b.err
 	}
+	if b.closed {
+		return fmt.Errorf("builder closed")
+	}
 
-	// Pending index entry
+	// Order check removed as bytes.Compare is insufficient for internal keys.
+	// We assume caller provides sorted keys.
+
+	// Pending index entry.
 	if b.pendingIndexEntry {
-		k := make([]byte, len(b.lastKey))
-		copy(k, b.lastKey)
-
+		sep := findShortestSeparator(b.lastKey, key)
 		encodedHandle := make([]byte, 16)
 		b.pendingHandle.EncodeTo(encodedHandle)
-
-		b.indexBlock.Add(k, encodedHandle)
+		b.indexBlock.Add(sep, encodedHandle)
 		b.pendingIndexEntry = false
 	}
 
 	b.dataBlock.Add(key, value)
 
-	// Update filter state.
-	kCopy := make([]byte, len(key))
-	copy(kCopy, key)
-	b.keys = append(b.keys, kCopy)
+	b.lastKey = make([]byte, len(key))
+	copy(b.lastKey, key)
 
-	b.lastKey = key
+	if b.filterPolicy != nil {
+		b.keys = append(b.keys, internal.ExtractUserKey(key))
+	}
+	b.numEntries++
 
 	if b.dataBlock.CurrentSize() >= blockSize {
-		if err := b.Flush(); err != nil {
+		if err := b.flushDataBlock(); err != nil {
 			b.err = err
 			return err
 		}
@@ -83,28 +98,22 @@ func (b *Builder) Add(key, value []byte) error {
 	return nil
 }
 
-// Size returns the approximate size of the file being built.
 func (b *Builder) Size() uint64 {
 	return b.offset + uint64(b.dataBlock.CurrentSize())
 }
 
-// Flush writes current block.
-func (b *Builder) Flush() error {
+func (b *Builder) flushDataBlock() error {
 	if b.dataBlock.Empty() {
 		return nil
 	}
 
-	// Write filter block.
 	content := b.dataBlock.Finish()
-
-	// Compress block data.
 	compressed := compress(content)
-	// Use compression if it reduces size.
 
 	var final []byte
 	var cType byte
 
-	if len(compressed) < len(content)-2 { // simple heuristic
+	if len(compressed) < len(content)-2 {
 		final = compressed
 		cType = byte(ZlibCompression)
 	} else {
@@ -112,32 +121,31 @@ func (b *Builder) Flush() error {
 		cType = byte(NoCompression)
 	}
 
-	// Write to file
 	n, err := b.writer.Write(final)
 	if err != nil {
 		return err
 	}
 
-	// Write compression type (1 byte)
 	if _, err := b.writer.Write([]byte{cType}); err != nil {
 		return err
 	}
 	n++
 
-	// Record handle
+	crc := crc32.ChecksumIEEE(final)
+	crc = crc32.Update(crc, crc32.IEEETable, []byte{cType})
+
+	if err := binary.Write(b.writer, binary.LittleEndian, crc); err != nil {
+		return err
+	}
+	n += 4
+
 	handle := BlockHandle{
 		Offset: b.offset,
 		Length: uint64(n),
 	}
 
-	// Update state
 	b.offset += uint64(n)
 	b.dataBlock.Reset()
-
-	// Prepare index entry.
-	lk := make([]byte, len(b.lastKey))
-	copy(lk, b.lastKey)
-	b.lastKey = lk
 
 	b.pendingHandle = handle
 	b.pendingIndexEntry = true
@@ -145,27 +153,28 @@ func (b *Builder) Flush() error {
 	return nil
 }
 
+// Close finishes the SSTable.
 func (b *Builder) Close() error {
+	if b.closed {
+		return nil
+	}
 	if b.err != nil {
 		return b.err
 	}
 
-	// Flush remaining
-	if err := b.Flush(); err != nil {
+	// Flush remaining.
+	if err := b.flushDataBlock(); err != nil {
 		return err
 	}
 
-	// Prepare index entry.
 	if b.pendingIndexEntry {
-		b.indexBlock.Add(b.lastKey, func() []byte {
-			buf := make([]byte, 16)
-			b.pendingHandle.EncodeTo(buf)
-			return buf
-		}())
+		encodedHandle := make([]byte, 16)
+		b.pendingHandle.EncodeTo(encodedHandle)
+		b.indexBlock.Add(b.lastKey, encodedHandle)
 		b.pendingIndexEntry = false
 	}
 
-	// Write filter block.
+	// Filter Block.
 	var filterHandle BlockHandle
 	if b.filterPolicy != nil && len(b.keys) > 0 {
 		filterData := b.filterPolicy.CreateFilter(b.keys)
@@ -176,15 +185,14 @@ func (b *Builder) Close() error {
 		filterHandle = BlockHandle{Offset: b.offset, Length: uint64(n)}
 		b.offset += uint64(n)
 
-		// Add to MetaIndex
 		encodedFilterHandle := make([]byte, 16)
 		filterHandle.EncodeTo(encodedFilterHandle)
 		b.metaIndexBlock.Add([]byte(b.filterPolicy.Name()), encodedFilterHandle)
 	}
 
-	// Write meta index block.
+	// Meta Index.
 	metaIndexContent := b.metaIndexBlock.Finish()
-	// Compress/Wrap MetaIndex
+
 	compressedMeta := compress(metaIndexContent)
 	var finalMeta []byte
 	var metaType byte
@@ -205,12 +213,19 @@ func (b *Builder) Close() error {
 	}
 	n++
 
+	crcMeta := crc32.ChecksumIEEE(finalMeta)
+	crcMeta = crc32.Update(crcMeta, crc32.IEEETable, []byte{metaType})
+	if err := binary.Write(b.writer, binary.LittleEndian, crcMeta); err != nil {
+		return err
+	}
+	n += 4
+
 	metaIndexHandle := BlockHandle{Offset: b.offset, Length: uint64(n)}
 	b.offset += uint64(n)
 
-	// Write meta index block.
+	// Index Block.
 	indexContent := b.indexBlock.Finish()
-	// Compress/Wrap Index
+
 	compressedIndex := compress(indexContent)
 	var finalIndex []byte
 	var indexType byte
@@ -231,13 +246,20 @@ func (b *Builder) Close() error {
 	}
 	n++
 
+	crcIndex := crc32.ChecksumIEEE(finalIndex)
+	crcIndex = crc32.Update(crcIndex, crc32.IEEETable, []byte{indexType})
+	if err := binary.Write(b.writer, binary.LittleEndian, crcIndex); err != nil {
+		return err
+	}
+	n += 4
+
 	indexHandle := BlockHandle{
 		Offset: b.offset,
 		Length: uint64(n),
 	}
 	b.offset += uint64(n)
 
-	// Footer
+	// Footer.
 	footer := Footer{
 		MetaindexHandle: metaIndexHandle,
 		IndexHandle:     indexHandle,
@@ -249,5 +271,21 @@ func (b *Builder) Close() error {
 		return err
 	}
 
+	if err := b.writer.Flush(); err != nil {
+		return err
+	}
+
+	b.closed = true
 	return b.file.Close()
+}
+
+func findShortestSeparator(a, b []byte) []byte {
+	return a
+}
+
+func encodeBlockHandle(offset, size uint64) []byte {
+	buf := make([]byte, 16)
+	binary.BigEndian.PutUint64(buf[0:], offset)
+	binary.BigEndian.PutUint64(buf[8:], size)
+	return buf
 }

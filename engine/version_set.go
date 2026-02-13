@@ -103,14 +103,14 @@ func (v *VersionSet) PickCompaction(l0Trigger int, l1MaxBytes int64) (int, bool)
 	bestScore := 0.0
 	bestLevel := -1
 
-	// Calculate L0 score.
+	// L0 score.
 	score := float64(len(v.Levels[0])) / float64(l0Trigger)
 	if score > bestScore {
 		bestScore = score
 		bestLevel = 0
 	}
 
-	// Calculate L1+ score.
+	// L1+ score.
 	for l := 1; l < NumLevels-1; l++ {
 		targetSize := float64(l1MaxBytes) * float64(int64(1)<<(l-1))
 		var currentSize float64
@@ -118,7 +118,7 @@ func (v *VersionSet) PickCompaction(l0Trigger int, l1MaxBytes int64) (int, bool)
 			if t.FileSize > 0 {
 				currentSize += float64(t.FileSize)
 			} else {
-				currentSize += 2 * 1024 * 1024 // Fallback: estimate 2MB per file
+				currentSize += 2 * 1024 * 1024 // Estimate 2MB.
 			}
 		}
 
@@ -144,7 +144,7 @@ func (v *VersionSet) GetOverlappingInputs(level int, start, end []byte) []SSTabl
 	for _, t := range v.Levels[level] {
 
 		if bytes.Compare(t.LargestKey, start) < 0 || bytes.Compare(t.SmallestKey, end) > 0 {
-			continue // No overlap
+			continue // No overlap.
 		}
 		inputs = append(inputs, t)
 	}

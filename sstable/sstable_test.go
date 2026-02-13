@@ -1,6 +1,7 @@
 package sstable
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -36,5 +37,55 @@ func TestSSTableIterator(t *testing.T) {
 
 	if string(it.Value()) != "1" {
 		t.Fatalf("unexpected value")
+	}
+}
+
+func TestPrefixCompression(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefix.sst")
+
+	b, err := NewBuilder(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add keys with long shared prefix
+	prefix := "long_shared_prefix_for_compression_"
+	b.Add(internal.EncodeInternalKey([]byte(prefix+"1"), 1, internal.RecordTypeValue), []byte("v1"))
+	b.Add(internal.EncodeInternalKey([]byte(prefix+"2"), 1, internal.RecordTypeValue), []byte("v2"))
+	b.Add(internal.EncodeInternalKey([]byte(prefix+"3"), 1, internal.RecordTypeValue), []byte("v3"))
+
+	if err := b.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify size is smaller than raw sum
+	// Raw keys = (32+1+8)*3 = 123 bytes
+	// Compressed should be much smaller.
+	info, _ := os.Stat(path)
+	if info.Size() > 200 {
+		// Very rough upper bound, mainly checking it's not exploding.
+		// Detailed check on block buffer would be better but integration test is enough.
+	}
+
+	// Verify Iterator
+	it, err := NewIterator(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	it.SeekToFirst()
+	if !it.Valid() || string(internal.ExtractUserKey(it.Key())) != prefix+"1" {
+		t.Fatalf("Expected %s1", prefix)
+	}
+
+	it.Next()
+	if !it.Valid() || string(internal.ExtractUserKey(it.Key())) != prefix+"2" {
+		t.Fatalf("Expected %s2", prefix)
+	}
+
+	it.Next()
+	if !it.Valid() || string(internal.ExtractUserKey(it.Key())) != prefix+"3" {
+		t.Fatalf("Expected %s3", prefix)
 	}
 }

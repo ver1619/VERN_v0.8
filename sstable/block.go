@@ -36,16 +36,31 @@ func (b *BlockBuilder) Reset() {
 
 func (b *BlockBuilder) Add(key, value []byte) {
 
-	// Add restart point
-	if b.counter >= restartInterval {
-		b.restarts = append(b.restarts, uint32(b.buf.Len()))
-		b.counter = 0
+	// Calculate shared prefix
+	shared := 0
+	if b.counter < restartInterval && b.lastUnsafeKey != nil {
+		minLen := len(b.lastUnsafeKey)
+		if len(key) < minLen {
+			minLen = len(key)
+		}
+		for shared < minLen && b.lastUnsafeKey[shared] == key[shared] {
+			shared++
+		}
+	} else {
+		// Restart point: shared prefix is 0
+		if b.counter >= restartInterval {
+			b.restarts = append(b.restarts, uint32(b.buf.Len()))
+			b.counter = 0
+		}
 	}
 
-	// Write KV
-	putVarint(&b.buf, uint64(len(key)))
+	unshared := len(key) - shared
+
+	// Write KV with prefix compression
+	putVarint(&b.buf, uint64(shared))
+	putVarint(&b.buf, uint64(unshared))
 	putVarint(&b.buf, uint64(len(value)))
-	b.buf.Write(key)
+	b.buf.Write(key[shared:])
 	b.buf.Write(value)
 
 	b.lastUnsafeKey = key // Keep reference for next key.
@@ -210,28 +225,52 @@ func (it *BlockIterator) ParseEntry(offset int) (key, value []byte, byteCount in
 	}
 
 	src := it.data[offset:]
+	current := 0
 
-	klen, n1 := binary.Uvarint(src)
-	if n1 <= 0 {
+	// Read shared key length
+	shared, n := binary.Uvarint(src[current:])
+	if n <= 0 {
+		return nil, nil, 0, false
+	}
+	current += n
+
+	// Read unshared key length
+	unshared, n := binary.Uvarint(src[current:])
+	if n <= 0 {
+		return nil, nil, 0, false
+	}
+	current += n
+
+	// Read value length
+	vlen, n := binary.Uvarint(src[current:])
+	if n <= 0 {
+		return nil, nil, 0, false
+	}
+	current += n
+
+	// Check bounds
+	if len(src) < current+int(unshared)+int(vlen) {
 		return nil, nil, 0, false
 	}
 
-	vlen, n2 := binary.Uvarint(src[n1:])
-	if n2 <= 0 {
-		return nil, nil, 0, false
+	// Reconstruct key
+	fullKeyLength := int(shared) + int(unshared)
+	fullKey := make([]byte, fullKeyLength)
+
+	if shared > 0 {
+		if len(it.key) < int(shared) {
+			return nil, nil, 0, false
+		}
+		copy(fullKey, it.key[:shared])
 	}
 
-	total := n1 + n2 + int(klen) + int(vlen)
-	if len(src) < total {
-		return nil, nil, 0, false
-	}
+	copy(fullKey[shared:], src[current:current+int(unshared)])
+	current += int(unshared)
 
-	kstart := n1 + n2
-	vstart := kstart + int(klen)
+	value = src[current : current+int(vlen)]
+	current += int(vlen)
 
-	key = src[kstart : kstart+int(klen)]
-	value = src[vstart : vstart+int(vlen)]
-	return key, value, total, true
+	return fullKey, value, current, true
 }
 
 func putVarint(buf *bytes.Buffer, x uint64) {

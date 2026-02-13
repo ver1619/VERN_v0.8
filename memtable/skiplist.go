@@ -36,7 +36,7 @@ func NewSkiplist() *Skiplist {
 	}
 }
 
-// randomLevel generates a level.
+// Generate random level.
 func randomLevel() int {
 	lvl := 1
 	for rand.Float64() < probability && lvl < maxLevel {
@@ -49,6 +49,7 @@ func (s *Skiplist) Insert(key, value []byte) {
 	update := make([]*Node, maxLevel)
 	current := s.head
 
+	// Find position.
 	for i := s.level - 1; i >= 0; i-- {
 		for current.next[i] != nil && s.cmp.Compare(current.next[i].key, key) < 0 {
 			current = current.next[i]
@@ -59,12 +60,13 @@ func (s *Skiplist) Insert(key, value []byte) {
 	current = current.next[0]
 
 	if current != nil && s.cmp.Compare(current.key, key) == 0 {
-		// Update existing
+		// Update existing.
 		s.sizeBytes -= (len(current.value) - len(value))
 		current.value = value
 		return
 	}
 
+	// Insert new.
 	lvl := randomLevel()
 	if lvl > s.level {
 		for i := s.level; i < lvl; i++ {
@@ -115,12 +117,12 @@ func (s *Skiplist) NewIterator() *Iterator {
 	}
 }
 
-// SeekToFirst resets iterator to the first element.
+// Reset to first element.
 func (it *Iterator) SeekToFirst() {
 	it.node = it.list.head.next[0]
 }
 
-// Seek advances iterator to the first node >= target.
+// Advance to first node >= target.
 func (it *Iterator) Seek(target []byte) {
 	current := it.list.head
 	for i := it.list.level - 1; i >= 0; i-- {
@@ -131,19 +133,19 @@ func (it *Iterator) Seek(target []byte) {
 	it.node = current.next[0]
 }
 
-// Next advances iterator.
+// Move to next.
 func (it *Iterator) Next() {
 	if it.node != nil {
 		it.node = it.node.next[0]
 	}
 }
 
-// Valid checks if iterator is valid.
+// Is valid?
 func (it *Iterator) Valid() bool {
 	return it.node != nil
 }
 
-// Key returns the current key.
+// Current key.
 func (it *Iterator) Key() []byte {
 	if it.node == nil {
 		return nil
@@ -151,7 +153,7 @@ func (it *Iterator) Key() []byte {
 	return it.node.key
 }
 
-// Value returns the current value.
+// Current value.
 func (it *Iterator) Value() []byte {
 	if it.node == nil {
 		return nil

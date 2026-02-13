@@ -34,7 +34,7 @@ func TestFullRecovery(t *testing.T) {
 	w.Close()
 
 	// Recover state.
-	state, err := Recover(manifestPath, walDir)
+	state, err := Recover(dir, walDir, 4*1024*1024)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package memtable
 
 import (
+	"bytes"
 	"sync"
 )
 
@@ -12,10 +13,11 @@ import (
 // Public API
 //
 
-// Memtable stores data in memory.
+// Memtable is an in-memory state
 type Memtable struct {
-	mu  sync.RWMutex
-	skl *Skiplist
+	mu       sync.RWMutex
+	skiplist *Skiplist
+	size     int64
 }
 
 // Entry represents a key-value pair.
@@ -28,10 +30,11 @@ type Entry struct {
 // Construction
 //
 
-// New creates a Memtable.
+// New creates a fresh Memtable.
 func New() *Memtable {
 	return &Memtable{
-		skl: NewSkiplist(),
+		skiplist: NewSkiplist(),
+		size:     0,
 	}
 }
 
@@ -39,36 +42,51 @@ func New() *Memtable {
 // Write path
 //
 
-// Insert adds a record.
+// Insert adds a key-value pair.
 func (m *Memtable) Insert(key []byte, value []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.skl.Insert(key, value)
+
+	// Improve approximation logic if needed.
+	estimatedSize := int64(len(key) + len(value) + 16) // Node overhead.
+	m.size += estimatedSize
+	m.skiplist.Insert(key, value)
 }
 
 //
 // Read-only access (for iterators & recovery)
 //
 
+// Get looks up a key.
+func (m *Memtable) Get(key []byte) ([]byte, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	it := m.skiplist.NewIterator()
+	it.Seek(key)
+	if it.Valid() && bytes.Equal(it.Key(), key) {
+		return it.Value(), true
+	}
+	return nil, false
+}
+
+// Size returns the number of entries.
 func (m *Memtable) Size() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.skl.Size()
+	return m.skiplist.Size()
 }
 
+// ApproximateSize returns estimated memory usage.
 func (m *Memtable) ApproximateSize() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.skl.ApproximateSize()
+	return int(m.size)
 }
 
-// Iterator returns a Memtable iterator.
+// Iterator returns an iterator over the memtable.
 func (m *Memtable) Iterator() *Iterator {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.skl.NewIterator()
+	return m.skiplist.NewIterator()
 }
-
-//
-// Utilities
-//

@@ -40,11 +40,13 @@ type DB struct {
 	nextFileNum uint64
 	cache       cache.Cache
 
+	snapshots *Snapshot // Head of snapshot list
+
 	bgErr   error      // Background error
 	bgErrMu sync.Mutex // Protects bgErr
 }
 
-// Open initializes and opens the database.
+// Open up the database.
 func Open(dir string, options ...*Config) (*DB, error) {
 	opts := DefaultConfig()
 	if len(options) > 0 && options[0] != nil {
@@ -56,7 +58,7 @@ func Open(dir string, options ...*Config) (*DB, error) {
 
 	var state *RecoveredState
 
-	// Fresh DB
+	// Brand new DB
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(walDir, 0755); err != nil {
 			return nil, err
@@ -74,9 +76,9 @@ func Open(dir string, options ...*Config) (*DB, error) {
 		}
 		f.Close()
 	} else {
-		// Existing DB
+		// Recover existing state.
 		var err error
-		state, err = Recover(manifestPath, walDir)
+		state, err = Recover(dir, walDir, opts.MemtableSizeLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -110,16 +112,16 @@ func Open(dir string, options ...*Config) (*DB, error) {
 		db.nextFileNum = 1
 	}
 
-	// Verify existence of all SSTables.
+	// Double check that all SSTables exist.
 	for _, meta := range db.version.GetAllTables() {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", meta.FileNum))
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			db.Close()
-			return nil, fmt.Errorf("consistency error: missing sstable %s", path)
+			return nil, fmt.Errorf("missing sstable: %s", path)
 		}
 	}
 
-	// Initialize 8MB cache.
+	// 8MB cache.
 	db.cache = cache.NewLRUCache(8 * 1024 * 1024)
 
 	return db, nil
@@ -129,14 +131,14 @@ func (db *DB) Close() error {
 	if err := db.wal.Close(); err != nil {
 		return err
 	}
-	// Final GC on close
+	// One last cleanup.
 	db.cleanupObsoleteFiles()
 	return db.manifest.Close()
 }
 
-// cleanupObsoleteFiles deletes unused SSTables.
+// Delete unused SSTables.
 func (db *DB) cleanupObsoleteFiles() {
-	// Identify obsolete files.
+	// Find them.
 	db.version.mu.RLock()
 	var obsolete []uint64
 	for fileNum := range db.version.Obsolete {
@@ -144,11 +146,11 @@ func (db *DB) cleanupObsoleteFiles() {
 	}
 	db.version.mu.RUnlock()
 
-	// Delete files
+	// Nuke them.
 	for _, fileNum := range obsolete {
 		path := filepath.Join(db.dir, fmt.Sprintf("%06d.sst", fileNum))
 		if err := os.Remove(path); err == nil || os.IsNotExist(err) {
-			// Remove from obsolete text map on success.
+			// Clear from map.
 			db.version.mu.Lock()
 			delete(db.version.Obsolete, fileNum)
 			db.version.mu.Unlock()
@@ -197,7 +199,7 @@ func (db *DB) Put(key, value []byte) error {
 	return nil
 }
 
-// Write applies a batch of operations.
+// Write applies a batch.
 func (db *DB) Write(batch *wal.Batch) error {
 	if err := db.checkBackgroundError(); err != nil {
 		return err
@@ -207,7 +209,7 @@ func (db *DB) Write(batch *wal.Batch) error {
 
 	batch.SeqStart = db.nextSeq
 
-	// Write to WAL
+	// Log it.
 	if err := db.wal.Append(*batch); err != nil {
 		return err
 	}
@@ -217,7 +219,7 @@ func (db *DB) Write(batch *wal.Batch) error {
 		}
 	}
 
-	// Write to Memtable
+	// Apply to memtable.
 	seq := batch.SeqStart
 	for _, r := range batch.Records {
 		typ := internal.RecordTypeValue
@@ -281,7 +283,7 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 
 	var iters []iterators.InternalIterator
 
-	// Active memtable
+	// Check active memtable.
 	var mtIt iterators.InternalIterator = iterators.NewMemtableIterator(db.memtable)
 	if opts != nil && opts.Snapshot != nil {
 		mtIt = iterators.NewVersionFilterIterator(
@@ -291,7 +293,7 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 	}
 	iters = append(iters, mtIt)
 
-	// Immutable memtables
+	// Check immutable memtables.
 	for _, im := range db.immutables {
 		var imIt iterators.InternalIterator = iterators.NewMemtableIterator(im)
 		if opts != nil && opts.Snapshot != nil {
@@ -303,16 +305,16 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 		iters = append(iters, imIt)
 	}
 
-	// Skip SSTables that don't overlap with the target key.
+	// Filter SSTables (bloom/range check).
 	sstables := db.getSortedCandidatedTables()
 
 	for _, meta := range sstables {
-		// Use key range metadata to filter SSTables.
+		// Key range check.
 		if len(meta.SmallestKey) > 0 && len(meta.LargestKey) > 0 {
 			smallestUser := internal.ExtractUserKey(meta.SmallestKey)
 			largestUser := internal.ExtractUserKey(meta.LargestKey)
 			if bytes.Compare(key, smallestUser) < 0 || bytes.Compare(key, largestUser) > 0 {
-				continue // Key out of range.
+				continue
 			}
 		}
 
@@ -332,10 +334,10 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 
 	db.mu.RUnlock()
 
-	merge := iterators.NewMergeIterator(iters)
+	merge := iterators.NewMergeIterator(iters, true)
 	merge.SeekToFirst()
 
-	// Stop iterating once we pass the target key.
+	// Stop when we pass the key.
 	for merge.Valid() {
 		userKey := internal.ExtractUserKey(merge.Key())
 		cmp := bytes.Compare(userKey, key)
@@ -347,7 +349,6 @@ func (db *DB) GetWithOptions(key []byte, opts *ReadOptions) ([]byte, error) {
 			return merge.Value(), nil
 		}
 		if cmp > 0 {
-			// Target key not found.
 			break
 		}
 		merge.Next()
@@ -361,11 +362,52 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 }
 
 func (db *DB) GetSnapshot() *Snapshot {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-	return &Snapshot{
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	s := &Snapshot{
 		ReadSeq: db.nextSeq - 1,
+		db:      db,
 	}
+
+	// Add to list.
+	s.next = db.snapshots
+	if db.snapshots != nil {
+		db.snapshots.prev = s
+	}
+	s.prev = nil
+	db.snapshots = s
+
+	return s
+}
+
+func (db *DB) ReleaseSnapshot(s *Snapshot) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if s.prev != nil {
+		s.prev.next = s.next
+	} else {
+		db.snapshots = s.next
+	}
+	if s.next != nil {
+		s.next.prev = s.prev
+	}
+
+	s.db = nil
+	s.prev = nil
+	s.next = nil
+}
+
+func (db *DB) getOldestSnapshotSeq() uint64 {
+	// Caller holds lock.
+	oldest := db.nextSeq
+	for s := db.snapshots; s != nil; s = s.next {
+		if s.ReadSeq < oldest {
+			oldest = s.ReadSeq
+		}
+	}
+	return oldest
 }
 
 func (db *DB) NewIterator(opts *ReadOptions) Iterator {
@@ -373,7 +415,7 @@ func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 
 	var iters []iterators.InternalIterator
 
-	// Active memtable
+	// Active memtable.
 	var mtIt iterators.InternalIterator = iterators.NewMemtableIterator(db.memtable)
 	if opts != nil && opts.Snapshot != nil {
 		mtIt = iterators.NewVersionFilterIterator(
@@ -383,7 +425,7 @@ func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 	}
 	iters = append(iters, mtIt)
 
-	// Immutable memtables
+	// Immutables.
 	for _, im := range db.immutables {
 		var imIt iterators.InternalIterator = iterators.NewMemtableIterator(im)
 		if opts != nil && opts.Snapshot != nil {
@@ -395,7 +437,7 @@ func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 		iters = append(iters, imIt)
 	}
 
-	// SSTables
+	// SSTables.
 	sstables := db.getSortedCandidatedTables()
 	validSSTs := make([]iterators.InternalIterator, 0)
 
@@ -417,16 +459,15 @@ func (db *DB) NewIterator(opts *ReadOptions) Iterator {
 
 	db.mu.RUnlock()
 
-	merge := iterators.NewMergeIterator(iters)
+	merge := iterators.NewMergeIterator(iters, true)
 
 	return &dbIterator{
 		inner: merge,
 	}
 }
 
-// getSortedCandidatedTables returns tables sorted by file number (descending).
+// Return tables sorted by FileNum (descending).
 func (db *DB) getSortedCandidatedTables() []SSTableMeta {
-	// Sort by FileNum descending
 	var metas []SSTableMeta
 	for _, m := range db.version.GetAllTables() {
 		metas = append(metas, m)
@@ -463,14 +504,14 @@ func (db *DB) NewPrefixIterator(
 	}
 }
 
-// rotateMemtableLocked moves active memtable to immutables.
+// Move active memtable to immutable list.
 func (db *DB) rotateMemtableLocked() {
 	frozen := db.memtable
 	db.immutables = append(db.immutables, frozen)
 	db.memtable = memtable.New()
 }
 
-// freezeMemtable rotates the memtable and schedules a flush.
+// Rotate and schedule flush.
 func (db *DB) freezeMemtable() {
 	db.mu.Lock()
 	db.rotateMemtableLocked()
@@ -491,7 +532,7 @@ func (db *DB) MaybeScheduleFlush() {
 	}()
 
 	for {
-		runtime.Gosched() // Yield to prevent starvation
+		runtime.Gosched() // Yield.
 		db.mu.Lock()
 		if len(db.immutables) == 0 {
 			db.mu.Unlock()
@@ -503,14 +544,14 @@ func (db *DB) MaybeScheduleFlush() {
 		db.nextFileNum++
 		db.mu.Unlock()
 
-		// Flush without holding lock.
+		// Flush it.
 		meta, err := db.flushMemtable(im, fileNum)
 		if err != nil {
 			db.setBackgroundError(err)
 			return
 		}
 
-		// Commit
+		// Commit.
 		db.mu.Lock()
 
 		if err := db.version.AddTable(meta); err != nil {
@@ -551,17 +592,17 @@ func (db *DB) MaybeScheduleFlush() {
 		db.immutables = db.immutables[1:]
 		db.mu.Unlock()
 
-		// Truncate old WAL segments.
+		// Truncate WAL.
 		if meta.LargestSeq > 0 {
 			walDir := filepath.Join(db.dir, db.opts.WalDir)
 			wal.Truncate(walDir, meta.LargestSeq)
 		}
 	}
 
-	// Trigger compaction if needed
+	// Compact if needed.
 	db.MaybeScheduleCompaction()
 
-	// Reclaim space
+	// Cleanup.
 	db.cleanupObsoleteFiles()
 }
 
@@ -584,10 +625,10 @@ func (db *DB) CompactManifest() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	// Snapshot current state
+	// Snapshot state.
 	var records []manifest.Record
 
-	// Tables
+	// Tables.
 	for _, meta := range db.version.GetAllTables() {
 		records = append(records, manifest.Record{
 			Type: manifest.RecordTypeAddSSTable,
@@ -603,13 +644,13 @@ func (db *DB) CompactManifest() error {
 		})
 	}
 
-	// WAL Cutoff
+	// WAL Cutoff.
 	records = append(records, manifest.Record{
 		Type: manifest.RecordTypeSetWALCutoff,
 		Data: manifest.SetWALCutoff{Seq: db.version.WALCutoffSeq},
 	})
 
-	// Rewrite
+	// Rewrite.
 	manifestPath := filepath.Join(db.dir, "MANIFEST")
 
 	if err := db.manifest.Close(); err != nil {
@@ -617,7 +658,7 @@ func (db *DB) CompactManifest() error {
 	}
 
 	if err := manifest.Rewrite(manifestPath, records); err != nil {
-		// Attempt to reopen existing manifest if rewrite fails.
+		// Try to recover.
 		m, reopenErr := manifest.OpenManifest(manifestPath)
 		if reopenErr == nil {
 			db.manifest = m
@@ -625,7 +666,7 @@ func (db *DB) CompactManifest() error {
 		return err
 	}
 
-	// Reopen
+	// Reopen.
 	m, err := manifest.OpenManifest(manifestPath)
 	if err != nil {
 		return err

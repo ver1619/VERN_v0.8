@@ -6,6 +6,10 @@ package engine
 // versions with sequence numbers <= ReadSeq.
 type Snapshot struct {
 	ReadSeq uint64
+
+	db   *DB
+	prev *Snapshot
+	next *Snapshot
 }
 
 // ReadOptions controls read behavior.

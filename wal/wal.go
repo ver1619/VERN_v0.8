@@ -25,6 +25,7 @@ type WAL struct {
 	segments     map[uint64]*Segment
 }
 
+// OpenWAL opens or creates a WAL.
 func OpenWAL(dir string, maxSegmentSize int64) (*WAL, error) {
 	if maxSegmentSize <= 0 {
 		maxSegmentSize = defaultSegmentSize
@@ -63,7 +64,7 @@ func (w *WAL) Append(batch Batch) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// Rotate if record does not fit
+	// Rotate if needed.
 	if w.active.Size()+int64(len(record)) > w.maxSegmentSz {
 		if err := w.rotate(); err != nil {
 			return err
@@ -73,13 +74,14 @@ func (w *WAL) Append(batch Batch) error {
 	return w.active.Append(record)
 }
 
+// Sync flushes the active segment.
 func (w *WAL) Sync() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
 	return w.active.Sync()
 }
 
+// Close closes all segments.
 func (w *WAL) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -92,7 +94,7 @@ func (w *WAL) Close() error {
 	return nil
 }
 
-// Segments returns sorted paths of WAL files.
+// Segments returns sorted WAL file paths.
 func (w *WAL) Segments() []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -110,7 +112,7 @@ func (w *WAL) Segments() []string {
 	return paths
 }
 
-/* ---------- internal helpers ---------- */
+/* ---------- Internal Helpers ---------- */
 
 func (w *WAL) loadExistingSegments() error {
 	entries, err := os.ReadDir(w.dir)
@@ -170,10 +172,12 @@ func (w *WAL) segmentPath(n uint64) string {
 	return filepath.Join(w.dir, fmt.Sprintf("wal_%06d.log", n))
 }
 
+// IsWALFile checks format.
 func IsWALFile(name string) bool {
 	return strings.HasPrefix(name, "wal_") && strings.HasSuffix(name, ".log")
 }
 
+// PathJoin helper.
 func PathJoin(dir, name string) string {
 	return filepath.Join(dir, name)
 }

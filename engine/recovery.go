@@ -1,11 +1,16 @@
 package engine
 
 import (
+	"fmt"
+	"math"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"vern_kv0.8/internal"
+	"vern_kv0.8/manifest"
 	"vern_kv0.8/memtable"
+	"vern_kv0.8/sstable"
 	"vern_kv0.8/wal"
 )
 
@@ -17,17 +22,19 @@ type RecoveredState struct {
 }
 
 // Recover restores DB state.
-func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
+func Recover(dbDir, walDir string, memtableLimit int) (*RecoveredState, error) {
+	manifestPath := filepath.Join(dbDir, "MANIFEST")
+
 	// Replay manifest.
 	vs, err := ReplayManifest(manifestPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Initialize memtable
+	// Initialize memtable.
 	mt := memtable.New()
 
-	// Determine max sequence and file number.
+	// Find max sequence and file number.
 	var maxSeq uint64
 	var maxFileNum uint64
 
@@ -99,6 +106,50 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 			}
 
 			offset += n
+
+			// Paging: Flush if memtable grows too large.
+			if mt.ApproximateSize() > memtableLimit {
+				fileNum := maxFileNum + 1
+				maxFileNum++
+
+				sstPath := filepath.Join(dbDir, fmt.Sprintf("%06d.sst", fileNum))
+				meta, err := writeMemtableToSSTable(mt, sstPath, fileNum)
+				if err != nil {
+					return nil, err
+				}
+
+				// Update VersionSet.
+				if err := vs.AddTable(meta); err != nil {
+					return nil, err
+				}
+
+				// Update Manifest.
+				m, err := manifest.OpenManifest(manifestPath)
+				if err != nil {
+					return nil, err
+				}
+
+				edit := manifest.Record{
+					Type: manifest.RecordTypeAddSSTable,
+					Data: manifest.AddSSTable{
+						FileNum:     meta.FileNum,
+						Level:       meta.Level,
+						SmallestKey: meta.SmallestKey,
+						LargestKey:  meta.LargestKey,
+						SmallestSeq: meta.SmallestSeq,
+						LargestSeq:  meta.LargestSeq,
+						FileSize:    meta.FileSize,
+					},
+				}
+				if err := m.Append(edit); err != nil {
+					m.Close()
+					return nil, err
+				}
+				m.Close()
+
+				// Reset Memtable.
+				mt = memtable.New()
+			}
 		}
 	}
 
@@ -108,6 +159,56 @@ func Recover(manifestPath string, walDir string) (*RecoveredState, error) {
 		NextSeq:     maxSeq + 1,
 		NextFileNum: maxFileNum,
 	}, nil
+}
+
+func writeMemtableToSSTable(mt *memtable.Memtable, filename string, fileNum uint64) (SSTableMeta, error) {
+	iter := mt.Iterator()
+	iter.SeekToFirst()
+
+	builder, err := sstable.NewBuilder(filename)
+	if err != nil {
+		return SSTableMeta{}, err
+	}
+
+	var meta SSTableMeta
+	meta.FileNum = fileNum
+	meta.Level = 0
+	meta.SmallestSeq = math.MaxUint64
+
+	first := true
+	for iter.Valid() {
+		key := iter.Key()
+		val := iter.Value()
+
+		if err := builder.Add(key, val); err != nil {
+			return SSTableMeta{}, err
+		}
+
+		if first {
+			meta.SmallestKey = make([]byte, len(key))
+			copy(meta.SmallestKey, key)
+			first = false
+		}
+		meta.LargestKey = make([]byte, len(key))
+		copy(meta.LargestKey, key)
+
+		seq, _, _ := internal.ExtractTrailer(key)
+		if seq < meta.SmallestSeq {
+			meta.SmallestSeq = seq
+		}
+		if seq > meta.LargestSeq {
+			meta.LargestSeq = seq
+		}
+
+		iter.Next()
+	}
+
+	if err := builder.Close(); err != nil {
+		return SSTableMeta{}, err
+	}
+
+	meta.FileSize = int64(builder.Size())
+	return meta, nil
 }
 
 // convertLogicalType converts WAL type to internal type.

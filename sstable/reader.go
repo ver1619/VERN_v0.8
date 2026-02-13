@@ -1,8 +1,10 @@
 package sstable
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"os"
 
 	"vern_kv0.8/internal/cache"
@@ -111,9 +113,22 @@ func (r *Reader) ReadBlock(handle BlockHandle) (*BlockIterator, error) {
 		return nil, errors.New("incomplete block read")
 	}
 
+	// Verify Checksum
+	if len(data) < 5 { // 1 byte type + 4 bytes CRC
+		return nil, errors.New("block too short for checksum")
+	}
+
+	content := data[:len(data)-4]
+	expectedCRC := binary.LittleEndian.Uint32(data[len(data)-4:])
+	actualCRC := crc32.ChecksumIEEE(content)
+
+	if actualCRC != expectedCRC {
+		return nil, errors.New("block checksum mismatch")
+	}
+
 	// Check compression type.
-	cType := data[len(data)-1]
-	payload := data[:len(data)-1]
+	cType := content[len(content)-1]
+	payload := content[:len(content)-1]
 
 	var decoded []byte
 	switch int(cType) {

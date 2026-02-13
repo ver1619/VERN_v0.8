@@ -123,7 +123,7 @@ func TestSkiplistIteratorSnapshot(t *testing.T) {
 	// Mutate the skiplist after iterator creation.
 	sl.Insert(ikey("c", 1), []byte("3"))
 
-	// The iterator should NOT see the new entry.
+	// The iterator SHOULD see the new entry (Live Iterator).
 	count := 0
 	it.SeekToFirst()
 	for it.Valid() {
@@ -131,8 +131,8 @@ func TestSkiplistIteratorSnapshot(t *testing.T) {
 		it.Next()
 	}
 
-	if count != 2 {
-		t.Fatalf("snapshot iterator should see 2 entries, got %d", count)
+	if count != 3 {
+		t.Fatalf("live iterator should see 3 entries, got %d", count)
 	}
 }
 

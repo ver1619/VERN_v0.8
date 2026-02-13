@@ -103,51 +103,58 @@ type iterEntry struct {
 
 // Iterator traverses the Skiplist.
 type Iterator struct {
-	entries []iterEntry
-	pos     int
+	list *Skiplist
+	node *Node
 }
 
 // NewIterator creates an iterator.
 func (s *Skiplist) NewIterator() *Iterator {
-	entries := make([]iterEntry, 0, s.count)
-	node := s.head.next[0]
-	for node != nil {
-		entries = append(entries, iterEntry{key: node.key, value: node.value})
-		node = node.next[0]
-	}
 	return &Iterator{
-		entries: entries,
-		pos:     -1,
+		list: s,
+		node: nil,
 	}
 }
 
-// SeekToFirst resets iterator.
+// SeekToFirst resets iterator to the first element.
 func (it *Iterator) SeekToFirst() {
-	if len(it.entries) > 0 {
-		it.pos = 0
-	} else {
-		it.pos = -1
+	it.node = it.list.head.next[0]
+}
+
+// Seek advances iterator to the first node >= target.
+func (it *Iterator) Seek(target []byte) {
+	current := it.list.head
+	for i := it.list.level - 1; i >= 0; i-- {
+		for current.next[i] != nil && it.list.cmp.Compare(current.next[i].key, target) < 0 {
+			current = current.next[i]
+		}
 	}
+	it.node = current.next[0]
 }
 
 // Next advances iterator.
 func (it *Iterator) Next() {
-	if it.pos >= 0 && it.pos < len(it.entries) {
-		it.pos++
+	if it.node != nil {
+		it.node = it.node.next[0]
 	}
 }
 
 // Valid checks if iterator is valid.
 func (it *Iterator) Valid() bool {
-	return it.pos >= 0 && it.pos < len(it.entries)
+	return it.node != nil
 }
 
 // Key returns the current key.
 func (it *Iterator) Key() []byte {
-	return it.entries[it.pos].key
+	if it.node == nil {
+		return nil
+	}
+	return it.node.key
 }
 
 // Value returns the current value.
 func (it *Iterator) Value() []byte {
-	return it.entries[it.pos].value
+	if it.node == nil {
+		return nil
+	}
+	return it.node.value
 }

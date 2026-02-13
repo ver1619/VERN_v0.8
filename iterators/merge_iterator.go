@@ -16,14 +16,16 @@ type MergeIterator struct {
 
 	initialized bool
 	cmp         internal.Comparator
+	Deduplicate bool // If true, skips older versions of same key.
 }
 
 // NewMergeIterator initializes a merging iterator.
-func NewMergeIterator(children []InternalIterator) *MergeIterator {
+func NewMergeIterator(children []InternalIterator, deduplicate bool) *MergeIterator {
 	return &MergeIterator{
-		iters: children,
-		valid: make([]bool, len(children)),
-		cmp:   internal.Comparator{},
+		iters:       children,
+		valid:       make([]bool, len(children)),
+		cmp:         internal.Comparator{},
+		Deduplicate: deduplicate,
 	}
 }
 
@@ -90,15 +92,17 @@ func (m *MergeIterator) advance() {
 		}
 	}
 
-	// Advance past older versions of the same user key.
-	userKey := internal.ExtractUserKey(m.currKey)
-	for i, it := range m.iters {
-		for m.valid[i] {
-			if !bytes.Equal(internal.ExtractUserKey(it.Key()), userKey) {
-				break
+	// Advance past older versions of the same user key ONLY if Deduplicate is true.
+	if m.Deduplicate {
+		userKey := internal.ExtractUserKey(m.currKey)
+		for i, it := range m.iters {
+			for m.valid[i] {
+				if !bytes.Equal(internal.ExtractUserKey(it.Key()), userKey) {
+					break
+				}
+				it.Next()
+				m.valid[i] = it.Valid()
 			}
-			it.Next()
-			m.valid[i] = it.Valid()
 		}
 	}
 }

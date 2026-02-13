@@ -17,6 +17,10 @@ func (it *MemtableIterator) SeekToFirst() {
 	it.iter.SeekToFirst()
 }
 
+func (it *MemtableIterator) Seek(key []byte) {
+	it.iter.Seek(key)
+}
+
 func (it *MemtableIterator) Next() {
 	it.iter.Next()
 }

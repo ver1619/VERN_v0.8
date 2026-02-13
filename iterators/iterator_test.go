@@ -44,7 +44,8 @@ func TestMergeMemtableAndSSTable(t *testing.T) {
 	merge := NewMergeIterator([]InternalIterator{
 		mtIt,
 		sstIt,
-	})
+	}, true)
+
 	merge.SeekToFirst()
 
 	if !merge.Valid() {
@@ -70,6 +71,31 @@ func TestMergeMemtableAndSSTable(t *testing.T) {
 	}
 }
 
+func TestMergeIteratorNoDedup(t *testing.T) {
+	mt := memtable.New()
+	mt.Insert(
+		internal.EncodeInternalKey([]byte("key"), 2, internal.RecordTypeValue),
+		[]byte("v2"),
+	)
+	mt.Insert(
+		internal.EncodeInternalKey([]byte("key"), 1, internal.RecordTypeValue),
+		[]byte("v1"),
+	)
+
+	mtIt := NewMemtableIterator(mt)
+	merge := NewMergeIterator([]InternalIterator{mtIt}, false)
+
+	merge.SeekToFirst()
+	if !merge.Valid() || string(merge.Value()) != "v2" {
+		t.Fatalf("expected v2 first")
+	}
+
+	merge.Next()
+	if !merge.Valid() || string(merge.Value()) != "v1" {
+		t.Fatalf("expected v1 second (no dedup)")
+	}
+}
+
 func TestVersionFilterIterator(t *testing.T) {
 	mt := memtable.New()
 
@@ -88,7 +114,7 @@ func TestVersionFilterIterator(t *testing.T) {
 
 	mtIt := NewMemtableIterator(mt)
 	filtered := NewVersionFilterIterator(mtIt, 2)
-	merge := NewMergeIterator([]InternalIterator{filtered})
+	merge := NewMergeIterator([]InternalIterator{filtered}, true)
 
 	merge.SeekToFirst()
 	if !merge.Valid() {
@@ -114,7 +140,7 @@ func TestVersionFilterHidesFutureWrites(t *testing.T) {
 
 	mtIt := NewMemtableIterator(mt)
 	filtered := NewVersionFilterIterator(mtIt, 3)
-	merge := NewMergeIterator([]InternalIterator{filtered})
+	merge := NewMergeIterator([]InternalIterator{filtered}, true)
 
 	merge.SeekToFirst()
 	if !merge.Valid() {

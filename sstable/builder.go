@@ -83,6 +83,11 @@ func (b *Builder) Add(key, value []byte) error {
 	return nil
 }
 
+// Size returns the approximate size of the file being built.
+func (b *Builder) Size() uint64 {
+	return b.offset + uint64(b.dataBlock.CurrentSize())
+}
+
 // Flush writes current block.
 func (b *Builder) Flush() error {
 	if b.dataBlock.Empty() {

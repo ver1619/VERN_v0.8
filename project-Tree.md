@@ -19,12 +19,14 @@
 │   ├── 📄 iterator.go
 │   ├── 📄 iterator_test.go
 │   ├── 📄 manifest_replay.go
+│   ├── 📄 recovery_paging_test.go
 │   ├── 📄 recovery.go
 │   ├── 📄 recovery_test.go
 │   ├── 📄 scan_iterator.go
 │   ├── 📄 scan_iterator_test.go
 │   ├── 📄 snapshot.go
 │   ├── 📄 snapshot_test.go
+│   ├── 📄 tombstone_snapshot_test.go
 │   ├── 📄 version_set.go
 │   └── 📄 version_set_test.go
 ├── 📁 internal
@@ -93,6 +95,7 @@
 ├── 📝 Architecture.md
 ├── 📝 cli-ui.md
 ├── 📄 go.mod
+├── 📄 go.sum
 ├── 📄 Invariants.md
 ├── 🪪 LICENSE
 ├── 🌳 project-Tree.md

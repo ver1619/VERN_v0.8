@@ -532,7 +532,7 @@ func (db *DB) MaybeScheduleFlush() {
 	}()
 
 	for {
-		runtime.Gosched() // Yield.
+		runtime.Gosched()
 		db.mu.Lock()
 		if len(db.immutables) == 0 {
 			db.mu.Unlock()

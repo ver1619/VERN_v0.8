@@ -37,6 +37,8 @@ Type HELP for available commands.
 
 **Syntax :** `OPEN <path>`
 
+**You have to run `OPEN` command before using any other command.**
+
 **Description :** Opens a database at the specified path. If the database does not exist, it creates one.
 
 **Example :**

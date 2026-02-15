@@ -53,7 +53,6 @@ func TestConcurrencySWMR(t *testing.T) {
 					count++
 					iter.Next()
 				}
-				// t.Logf("Reader %d saw %d items", rid, count)
 			}
 		}(r)
 	}

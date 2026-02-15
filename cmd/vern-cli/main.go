@@ -70,7 +70,7 @@ func main() {
 	runInputLoop()
 }
 
-// enterRawMode switches the terminal to raw mode for key-by-key input.
+// Switch the terminal to raw mode for key-by-key input.
 func enterRawMode() error {
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
@@ -80,7 +80,7 @@ func enterRawMode() error {
 	return nil
 }
 
-// exitRawMode restores the terminal to cooked (normal) mode for clean output.
+// Restore the terminal to cooked (normal) mode for clean output.
 func exitRawMode() {
 	if termState != nil {
 		term.Restore(int(os.Stdin.Fd()), termState)
@@ -215,7 +215,7 @@ func runSimpleInputLoop() {
 }
 
 func addToHistory(cmd string) {
-	// Don't add if it's the same as the last command (avoid consecutive duplicates)
+	// avoid consecutive duplicates
 	if len(history) > 0 && history[len(history)-1] == cmd {
 		return
 	}
@@ -228,7 +228,7 @@ func addToHistory(cmd string) {
 	}
 }
 
-// rawPrintPrompt prints the prompt while in raw terminal mode (no \n translation needed).
+// Print the prompt while in raw terminal mode (no translation needed).
 func rawPrintPrompt() {
 	fmt.Printf("%s(VERN) > %s", ColorYellow, ColorReset)
 }
@@ -350,7 +350,6 @@ func execPut(line string, parts []string) {
 	value := rest
 
 	if value == "" {
-		// Should be caught by len(parts) < 3 check above, but double check
 		printError("[ERROR] Syntax Error: Missing value argument.")
 		fmt.Printf("%sUsage:%s PUT <key> <value>\n", ColorRed, ColorReset)
 		return

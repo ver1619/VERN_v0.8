@@ -30,24 +30,21 @@ func TestFlushManual(t *testing.T) {
 func TestFlushRecovery(t *testing.T) {
 	dir := t.TempDir()
 
-	// Phase 1: Write and Flush
 	{
 		db, _ := Open(dir)
 		db.Put([]byte("a"), []byte("val1"))
-		db.freezeMemtable() // Flush to 000001.sst
+		db.freezeMemtable()
 
 		db.wal.Close()
 		db.manifest.Close()
 	}
 
-	// Phase 2: Recover
 	{
 		db, err := Open(dir)
 		if err != nil {
 			t.Fatalf("Reopen failed: %v", err)
 		}
 
-		// Check that we 'know' about the table
 		tables := db.version.GetAllTables()
 		if len(tables) != 1 {
 			t.Errorf("Expected 1 table, got %d", len(tables))
@@ -65,7 +62,6 @@ func TestFlushRecovery(t *testing.T) {
 			t.Errorf("Expected table 1 to be present")
 		}
 
-		// Ensure nextFileNum is advanced
 		if db.nextFileNum <= 1 {
 			t.Errorf("Expected nextFileNum > 1, got %d", db.nextFileNum)
 		}

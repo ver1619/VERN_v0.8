@@ -418,7 +418,7 @@ All blocks are written sequentially<br>
 
 ### Data Block<br>
 
-- Small chunck of sorted ky-value pairs inside an SSTable.<br>
+- Small chunk of sorted key-value pairs inside an SSTable.<br>
 - SSTable contain multiple data blocks.<br>
 - Typical size : 4KB - 32KB<br>
 - Instead of reading the whole SSTable, the DB reads one block from disk (Read 1 block -> multiple keys loaded).<br>
@@ -432,7 +432,7 @@ All blocks are written sequentially<br>
 
 **Data Block Layout**<br>
 ```python
-[key ,values] -> contains many key-value pairs stored in sorted order.
+[key ,value] -> contains many key-value pairs stored in sorted order.
 [restart points] -> helps the DB jump close to the correct place when searching
 [restart count] -> reader uses this to understand the restart list
 [checksum]
@@ -441,12 +441,12 @@ All blocks are written sequentially<br>
 
 ### Index Block<br>
 
-GOAL : Locate the correct data block quickly without scanning the entire SSTable.<br>
+**GOAL** : Locate the correct data block quickly without scanning the entire SSTable.<br>
 - The index block is a map of all data blocks in the SSTable.<br>
 - It tells the database which data block to open when searching for a key.<br>
 
 **Index Block Layout**<br>
-```python
+```go
 [last/first key of the block] [block offset] [block size]
 ```
 
@@ -729,12 +729,12 @@ Read(key)
 Choose snapshot_seq
    ↓
 MemTable ?
-   ├─ Found → return
+   ├─ Found → return value / tombstone
    | 
 Not found 
    ↓
 Immutable MemTable ?
-   ├─ Found → return
+   ├─ Found → return value / tombstone
    |
 Not found 
    ↓
@@ -823,7 +823,7 @@ Compaction writes the new merged SSTable files completely to disk.<br>
 
 - Update Manifest (log record)<br>
 A new record is appended to the Manifest saying:<br>
-```
+```python
 ADD NEW SSTABLE
 REMOVE OLD SSTABLE
 ```

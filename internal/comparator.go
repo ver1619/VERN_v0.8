@@ -25,7 +25,7 @@ func (Comparator) Compare(a, b []byte) int {
 		return 1
 	}
 
-	// Same sequence: compare types (ascending).
+	// Same sequence: compare types.
 	if atype < btype {
 		return -1
 	}

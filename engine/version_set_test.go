@@ -131,7 +131,7 @@ func TestVersionSet_PickCompaction(t *testing.T) {
 	vs := NewVersionSet()
 
 	// Case 1: L0 triggers compaction
-	// L0Trigger = 4. Add 5 tables.
+	// L0Trigger = Add 5 tables.
 	for i := 0; i < 5; i++ {
 		vs.AddTable(SSTableMeta{FileNum: uint64(i), Level: 0})
 	}
@@ -148,8 +148,7 @@ func TestVersionSet_PickCompaction(t *testing.T) {
 	// Clear L0
 	vs.Levels[0] = nil
 
-	// L1 max bytes = 1000. Add 1 file of size 2MB (simulated in PickCompaction logic as ~2MB per file)
-	// Code: currentSize := float64(len(v.Levels[l])) * 2 * 1024 * 1024
+	// L1 max bytes = 1000. Add 1 file of size 2MB
 	// Target: 1000
 	// Score should be massive.
 	vs.AddTable(SSTableMeta{FileNum: 10, Level: 1})

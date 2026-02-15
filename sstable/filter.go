@@ -35,7 +35,7 @@ func (f *BloomFilter) CreateFilter(keys [][]byte) []byte {
 	bytes := (bits + 7) / 8
 	bits = bytes * 8
 
-	filter := make([]byte, bytes+1) // +1 for k (# of probes)
+	filter := make([]byte, bytes+1)
 
 	// Calculate k
 	k := int(float64(f.bitsPerKey) * 0.69)

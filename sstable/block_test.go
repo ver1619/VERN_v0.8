@@ -68,8 +68,8 @@ func TestBlockSeek(t *testing.T) {
 		{"key050", "key050"},
 		{"key099", "key099"},
 		{"key010", "key010"},
-		{"key00", "key000"},   // Seek to before first
-		{"key049a", "key050"}, // Seek to between keys
+		{"key00", "key000"},   // Seek before first
+		{"key049a", "key050"}, // Seek between keys
 	}
 
 	for _, tt := range tests {

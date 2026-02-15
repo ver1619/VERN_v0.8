@@ -54,8 +54,6 @@ func TestRecoveryPaging(t *testing.T) {
 
 	// Check final memtable
 	if state.Memtable.Size() == 0 {
-		// Possibly flushed last one too? or partial
-		// 10 items.
 		// If exact flush, memtable might be empty or small.
 	}
 

@@ -5,14 +5,6 @@ import (
 	"sync"
 )
 
-//
-// Internal representation
-//
-
-//
-// Public API
-//
-
 // Memtable is an in-memory state
 type Memtable struct {
 	mu       sync.RWMutex
@@ -26,10 +18,6 @@ type Entry struct {
 	Value []byte
 }
 
-//
-// Construction
-//
-
 // New creates a fresh Memtable.
 func New() *Memtable {
 	return &Memtable{
@@ -38,10 +26,7 @@ func New() *Memtable {
 	}
 }
 
-//
 // Write path
-//
-
 // Insert adds a key-value pair.
 func (m *Memtable) Insert(key []byte, value []byte) {
 	m.mu.Lock()
@@ -53,11 +38,8 @@ func (m *Memtable) Insert(key []byte, value []byte) {
 	m.skiplist.Insert(key, value)
 }
 
-//
-// Read-only access (for iterators & recovery)
-//
-
-// Get looks up a key.
+// Read-only access
+// Get looks for key.
 func (m *Memtable) Get(key []byte) ([]byte, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -23,7 +23,7 @@ type Config struct {
 	L1MaxBytes int64
 
 	// SyncWrites controls whether each write is fsynced to WAL.
-	// When true (default), every Put/Delete/Write is durable after return.
+	// When true (default), every Put/Delete is durable after return.
 	// When false, writes are buffered and may be lost on crash.
 	SyncWrites bool
 }

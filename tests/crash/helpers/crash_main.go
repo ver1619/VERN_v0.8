@@ -24,8 +24,7 @@ func main() {
 	// Put but crash before fsync
 	_ = db.Put([]byte("a"), []byte("1"))
 	maybeCrash("before_wal_fsync")
-
-	// Second write (never reached in fsync test)
+	// Second write (intentionally placed after durability boundary to test crash behavior)
 	_ = db.Put([]byte("b"), []byte("2"))
 	maybeCrash("after_put")
 }

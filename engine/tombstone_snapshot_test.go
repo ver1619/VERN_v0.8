@@ -39,18 +39,6 @@ func TestTombstoneGC_SnapshotSafety(t *testing.T) {
 	s2 := db.GetSnapshot()
 	defer db.ReleaseSnapshot(s2)
 
-	// 5. Force Flush (Close/Reopen easiest to ensure data is on disk)
-	// But we lose s1/s2 if we close DB.
-	// We need to trigger flush without closing.
-	// We can fill memtable.
-	// But `MaybeScheduleFlush` is background.
-	// We can manually call `CompactLevel` if we assume data is there?
-	// But Delete is in Memtable.
-	// We need to rotate memtable.
-	// `db.freezeMemtable()` is private.
-	// We can use reflection or just write enough data.
-	// Let's write dummy data to fill memtable.
-
 	// Write 1MB of dummy data
 	dummyVal := make([]byte, 1024) // 1KB
 	for i := 0; i < 1100; i++ {    // > 1MB
@@ -77,10 +65,4 @@ func TestTombstoneGC_SnapshotSafety(t *testing.T) {
 	if err != ErrNotFound {
 		t.Fatalf("S2 should not find key, got: %v", err)
 	}
-
-	// If Tombstone was dropped, S2 might see V1 (Data Resurrection)
-	// Because V1 (Seq=1) < S2 (Seq=2).
-	// If T (Seq=2) is dropped, S2 reads V1.
-	// The fact we see ErrNotFound implies T was KEPT (or V1 was also dropped).
-	// But V1 must be kept for S1. So T must be kept for S2.
 }

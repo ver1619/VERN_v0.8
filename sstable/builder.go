@@ -65,9 +65,8 @@ func (b *Builder) Add(key, value []byte) error {
 	if b.closed {
 		return fmt.Errorf("builder closed")
 	}
-
-	// Order check removed as bytes.Compare is insufficient for internal keys.
-	// We assume caller provides sorted keys.
+	// Ordering check removed. Internal key ordering cannot be validated via bytes.Compare.
+	// Caller guarantees sorted input.
 
 	// Pending index entry.
 	if b.pendingIndexEntry {

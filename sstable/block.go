@@ -10,7 +10,7 @@ type BlockBuilder struct {
 	buf           bytes.Buffer
 	restarts      []uint32
 	restartCount  int
-	counter       int // Items since last restart.
+	counter       int
 	lastUnsafeKey []byte
 	finished      bool
 }

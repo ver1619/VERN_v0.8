@@ -22,7 +22,7 @@ var (
 type LogicalRecord struct {
 	Key   []byte
 	Value []byte
-	Type  uint8 // Operation type.
+	Type  uint8
 }
 
 // Batch represents an atomic update.

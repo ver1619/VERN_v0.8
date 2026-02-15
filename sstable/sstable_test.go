@@ -61,11 +61,10 @@ func TestPrefixCompression(t *testing.T) {
 
 	// Verify size is smaller than raw sum
 	// Raw keys = (32+1+8)*3 = 123 bytes
-	// Compressed should be much smaller.
+	// Compressed sum should be much smaller.
 	info, _ := os.Stat(path)
 	if info.Size() > 200 {
 		// Very rough upper bound, mainly checking it's not exploding.
-		// Detailed check on block buffer would be better but integration test is enough.
 	}
 
 	// Verify Iterator

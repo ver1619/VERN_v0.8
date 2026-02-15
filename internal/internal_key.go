@@ -13,7 +13,7 @@ const (
 	RecordTypeTombstone RecordType = 0x02
 )
 
-// InternalKey comprises the user key, sequence number, and record type.
+// InternalKey comprises of user key, sequence number, and record type.
 type InternalKey struct {
 	UserKey []byte
 	Seq     uint64

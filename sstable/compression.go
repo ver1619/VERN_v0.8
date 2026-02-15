@@ -9,8 +9,8 @@ import (
 const (
 	NoCompression     = 0
 	ZlibCompression   = 1
-	SnappyCompression = 2 // Future
-	ZstdCompression   = 3 // Future
+	SnappyCompression = 2
+	ZstdCompression   = 3
 )
 
 func compress(src []byte) []byte {

@@ -28,8 +28,7 @@ func Truncate(walDir string, cutoffSeq uint64) error {
 	var deletable []string
 
 	for i, path := range segments {
-		// Always preserve the last (active) segment to avoid
-		// deleting a file the WAL handle is still writing
+		// Always preserve the last (active) segment to avoid deleting a file the WAL handle is still writing
 		if i == len(segments)-1 {
 			break
 		}
@@ -66,7 +65,7 @@ func Truncate(walDir string, cutoffSeq uint64) error {
 
 	// Delete deletable segments
 	for _, path := range deletable {
-		_ = os.Remove(path) // idempotent
+		_ = os.Remove(path)
 	}
 
 	// Ensure directory durability

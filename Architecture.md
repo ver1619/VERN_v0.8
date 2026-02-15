@@ -295,7 +295,7 @@ There is no in-place update.
 
 **Interaction**<br>
 
-```
+```python
 Flush / Compaction
    |
    v
@@ -316,7 +316,7 @@ SSTable becomes visible
 
 
 **Working**<br>
-```
+```python
 1. Open MANIFEST
 2. Sequentially read records
 3. Validate CRC
@@ -431,7 +431,7 @@ All blocks are written sequentially<br>
 - Reduced disk I/O<br>
 
 **Data Block Layout**<br>
-```go
+```python
 [key ,values] -> contains many key-value pairs stored in sorted order.
 [restart points] -> helps the DB jump close to the correct place when searching
 [restart count] -> reader uses this to understand the restart list
@@ -446,7 +446,7 @@ GOAL : Locate the correct data block quickly without scanning the entire SSTable
 - It tells the database which data block to open when searching for a key.<br>
 
 **Index Block Layout**<br>
-```go
+```python
 [last/first key of the block] [block offset] [block size]
 ```
 
@@ -536,7 +536,7 @@ When reading a key:<br>
 
 **Block cache layout**<br>
 
-```go
+```python
 Block Cache (RAM)
 --------------------------------
 block_id → block_data

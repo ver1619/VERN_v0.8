@@ -1,47 +1,58 @@
 # Tests Report v0.8
 
-**This report provides a detailed breakdown of the 35 test files**
+**This report provides a detailed breakdown of the 38 test files**
 
 ## Test Results
 ```python
+=== RUN   TestCompactionSplit
+    compaction_split_test.go:61: Starting manual compaction of L0...
+    compaction_split_test.go:73: Compaction complete. L0=0, L1=2
+    compaction_split_test.go:87: L1 File: Num=9, Size=21035277
+    compaction_split_test.go:87: L1 File: Num=10, Size=11136359
+--- PASS: TestCompactionSplit (6.26s)
 === RUN   TestCompactionL0toL1
---- PASS: TestCompactionL0toL1 (0.24s)
+--- PASS: TestCompactionL0toL1 (0.16s)
 === RUN   TestCompactionL1ToL2
---- PASS: TestCompactionL1ToL2 (0.01s)
+--- PASS: TestCompactionL1ToL2 (0.02s)
 === RUN   TestConcurrencySWMR
---- PASS: TestConcurrencySWMR (11.00s)
+--- PASS: TestConcurrencySWMR (7.80s)
 === RUN   TestDBPutGetDelete
 --- PASS: TestDBPutGetDelete (0.02s)
 === RUN   TestDBRecovery
 --- PASS: TestDBRecovery (0.01s)
 === RUN   TestGetWithSnapshot
---- PASS: TestGetWithSnapshot (0.02s)
+--- PASS: TestGetWithSnapshot (0.01s)
 === RUN   TestSnapshotDeleteVisibility
---- PASS: TestSnapshotDeleteVisibility (0.02s)
+--- PASS: TestSnapshotDeleteVisibility (0.01s)
 === RUN   TestImmutableMemtableReadVisibility
---- PASS: TestImmutableMemtableReadVisibility (0.05s)
+--- PASS: TestImmutableMemtableReadVisibility (0.04s)
 === RUN   TestFlushManual
---- PASS: TestFlushManual (0.06s)
+--- PASS: TestFlushManual (0.04s)
 === RUN   TestFlushRecovery
---- PASS: TestFlushRecovery (0.05s)
+--- PASS: TestFlushRecovery (0.03s)
 === RUN   TestFullCycleFlushAndRead
---- PASS: TestFullCycleFlushAndRead (0.11s)
+--- PASS: TestFullCycleFlushAndRead (0.06s)
 === RUN   TestSnapshotIteratorStability
 --- PASS: TestSnapshotIteratorStability (0.02s)
 === RUN   TestIteratorDeleteVisibility
---- PASS: TestIteratorDeleteVisibility (0.02s)
+--- PASS: TestIteratorDeleteVisibility (0.01s)
+=== RUN   TestRecoveryPaging
+    recovery_paging_test.go:62: Recovered 5 L0 files
+--- PASS: TestRecoveryPaging (0.05s)
 === RUN   TestFullRecovery
---- PASS: TestFullRecovery (0.02s)
+--- PASS: TestFullRecovery (0.01s)
 === RUN   TestRangeScanSnapshot
---- PASS: TestRangeScanSnapshot (0.05s)
+--- PASS: TestRangeScanSnapshot (0.03s)
 === RUN   TestPrefixScan
---- PASS: TestPrefixScan (0.03s)
+--- PASS: TestPrefixScan (0.02s)
 === RUN   TestSnapshotCapturesSequence
---- PASS: TestSnapshotCapturesSequence (0.02s)
+--- PASS: TestSnapshotCapturesSequence (0.01s)
 === RUN   TestSnapshotIsImmutable
---- PASS: TestSnapshotIsImmutable (0.02s)
+--- PASS: TestSnapshotIsImmutable (0.01s)
+=== RUN   TestTombstoneGC_SnapshotSafety
+--- PASS: TestTombstoneGC_SnapshotSafety (0.74s)
 === RUN   TestVersionSetReplay
---- PASS: TestVersionSetReplay (0.03s)
+--- PASS: TestVersionSetReplay (0.01s)
 === RUN   TestVersionSet_AddTable
 --- PASS: TestVersionSet_AddTable (0.00s)
 === RUN   TestVersionSet_RemoveTable
@@ -51,7 +62,7 @@
 === RUN   TestVersionSet_GetOverlappingInputs
 --- PASS: TestVersionSet_GetOverlappingInputs (0.00s)
 PASS
-ok      vern_kv0.8/engine       11.831s
+ok      vern_kv0.8/engine       15.410s
 === RUN   TestInternalKeyEncodeDecode
 --- PASS: TestInternalKeyEncodeDecode (0.00s)
 === RUN   TestComparatorOrdering
@@ -59,7 +70,7 @@ ok      vern_kv0.8/engine       11.831s
 === RUN   TestExtractHelpers
 --- PASS: TestExtractHelpers (0.00s)
 PASS
-ok      vern_kv0.8/internal     0.018s
+ok      vern_kv0.8/internal     0.006s
 === RUN   TestLRUCache_Basic
 --- PASS: TestLRUCache_Basic (0.00s)
 === RUN   TestLRUCache_Overwrite
@@ -71,21 +82,23 @@ ok      vern_kv0.8/internal     0.018s
 === RUN   TestLRUCache_Concurrency
 --- PASS: TestLRUCache_Concurrency (0.00s)
 PASS
-ok      vern_kv0.8/internal/cache       0.024s
+ok      vern_kv0.8/internal/cache       0.010s
 === RUN   TestMergeMemtableAndSSTable
---- PASS: TestMergeMemtableAndSSTable (0.02s)
+--- PASS: TestMergeMemtableAndSSTable (0.00s)
+=== RUN   TestMergeIteratorNoDedup
+--- PASS: TestMergeIteratorNoDedup (0.00s)
 === RUN   TestVersionFilterIterator
 --- PASS: TestVersionFilterIterator (0.00s)
 === RUN   TestVersionFilterHidesFutureWrites
 --- PASS: TestVersionFilterHidesFutureWrites (0.00s)
 PASS
-ok      vern_kv0.8/iterators    0.025s
+ok      vern_kv0.8/iterators    0.011s
 === RUN   TestManifestAppendAndDecode
---- PASS: TestManifestAppendAndDecode (0.03s)
+--- PASS: TestManifestAppendAndDecode (0.02s)
 === RUN   TestManifestCorruption
 --- PASS: TestManifestCorruption (0.00s)
 PASS
-ok      vern_kv0.8/manifest     0.048s
+ok      vern_kv0.8/manifest     0.028s
 === RUN   TestMemtableInsertAndSize
 --- PASS: TestMemtableInsertAndSize (0.00s)
 === RUN   TestMemtableOrderingByUserKey
@@ -105,11 +118,11 @@ ok      vern_kv0.8/manifest     0.048s
 === RUN   TestSkiplistIteratorSnapshot
 --- PASS: TestSkiplistIteratorSnapshot (0.00s)
 === RUN   TestSkiplistLargeInsert
---- PASS: TestSkiplistLargeInsert (0.01s)
+--- PASS: TestSkiplistLargeInsert (0.00s)
 === RUN   TestRandomLevel
 --- PASS: TestRandomLevel (0.00s)
 PASS
-ok      vern_kv0.8/memtable     0.025s
+ok      vern_kv0.8/memtable     0.010s
 === RUN   TestBlockBuilder
 --- PASS: TestBlockBuilder (0.00s)
 === RUN   TestBlockSeek
@@ -122,43 +135,44 @@ ok      vern_kv0.8/memtable     0.025s
 === RUN   TestBloomFilterLogic
 --- PASS: TestBloomFilterLogic (0.00s)
 === RUN   TestFilterIntegration
---- PASS: TestFilterIntegration (0.03s)
+--- PASS: TestFilterIntegration (0.01s)
 === RUN   TestFullSSTable
---- PASS: TestFullSSTable (0.02s)
+--- PASS: TestFullSSTable (0.03s)
 === RUN   TestSSTableIterator
 --- PASS: TestSSTableIterator (0.01s)
+=== RUN   TestPrefixCompression
+--- PASS: TestPrefixCompression (0.01s)
 PASS
-ok      vern_kv0.8/sstable      0.066s
+ok      vern_kv0.8/sstable      0.072s
 === RUN   TestManifestCompaction
-    manifest_test.go:65: Initial Manifest Size: 0, Final: 20
---- PASS: TestManifestCompaction (0.13s)
+    manifest_test.go:65: Initial Manifest Size: 0, Final: 108
+--- PASS: TestManifestCompaction (0.17s)
 PASS
-ok      vern_kv0.8/tests        0.154s
+ok      vern_kv0.8/tests        0.174s
 === RUN   TestCrashConsistency
---- PASS: TestCrashConsistency (0.54s)
+--- PASS: TestCrashConsistency (0.46s)
 === RUN   TestRecoveryIsDeterministic
---- PASS: TestRecoveryIsDeterministic (0.04s)
+--- PASS: TestRecoveryIsDeterministic (0.03s)
 === RUN   TestTruncationIdempotence
---- PASS: TestTruncationIdempotence (0.02s)
+--- PASS: TestTruncationIdempotence (0.01s)
 === RUN   TestCrashBeforeWALFsync
---- PASS: TestCrashBeforeWALFsync (0.69s)
+--- PASS: TestCrashBeforeWALFsync (0.58s)
 PASS
-ok      vern_kv0.8/tests/crash  1.309s
-?       vern_kv0.8/tests/crash/helpers  
+ok      vern_kv0.8/tests/crash  1.086s
 === RUN   TestReplayRepeatability
 --- PASS: TestReplayRepeatability (0.02s)
 PASS
-ok      vern_kv0.8/tests/determinism    0.028s
+ok      vern_kv0.8/tests/determinism    0.033s
 === RUN   TestAutoFlushKeyTrigger
---- PASS: TestAutoFlushKeyTrigger (35.64s)
+--- PASS: TestAutoFlushKeyTrigger (24.96s)
 === RUN   TestIntegrationBasic
---- PASS: TestIntegrationBasic (0.66s)
+--- PASS: TestIntegrationBasic (0.43s)
 === RUN   TestIntegrationCompactionSpaceReclamation
---- PASS: TestIntegrationCompactionSpaceReclamation (0.07s)
+--- PASS: TestIntegrationCompactionSpaceReclamation (0.04s)
 === RUN   TestOpenPutGet
 --- PASS: TestOpenPutGet (0.01s)
 PASS
-ok      vern_kv0.8/tests/integration    36.393s
+ok      vern_kv0.8/tests/integration    25.450s
 === RUN   TestEncodeDecodeRecord
 --- PASS: TestEncodeDecodeRecord (0.00s)
 === RUN   TestCRCFailureStopsDecode
@@ -168,19 +182,19 @@ ok      vern_kv0.8/tests/integration    36.393s
 === RUN   TestSegmentAppendAndSync
 --- PASS: TestSegmentAppendAndSync (0.01s)
 === RUN   TestSegmentReopenAppend
---- PASS: TestSegmentReopenAppend (0.01s)
+--- PASS: TestSegmentReopenAppend (0.02s)
 === RUN   TestAppendAfterCloseFails
 --- PASS: TestAppendAfterCloseFails (0.01s)
 === RUN   TestWALTruncation
 --- PASS: TestWALTruncation (0.02s)
 === RUN   TestWALAppendAndRotate
---- PASS: TestWALAppendAndRotate (0.07s)
+--- PASS: TestWALAppendAndRotate (0.10s)
 === RUN   TestWALReopen
 --- PASS: TestWALReopen (0.01s)
 === RUN   TestWALCloseClosesAllSegments
 --- PASS: TestWALCloseClosesAllSegments (0.01s)
 PASS
-ok      vern_kv0.8/wal  0.156s
+ok      vern_kv0.8/wal  0.203s
 ```
 
 ---
@@ -202,6 +216,9 @@ ok      vern_kv0.8/wal  0.156s
 | `engine/scan_iterator_test.go` | Tests range scan and prefix scan functionality. |
 | `engine/snapshot_test.go` | Validates snapshot creation, sequence capture, and immutability guarantees. |
 | `engine/version_set_test.go` | Tests version set management: table add/remove, compaction selection, and overlap resolution. |
+| `engine/compaction_split_test.go` | Validates compaction output splitting into multiple L1 files with proper size thresholds and version updates. |
+| `engine/recovery_paging_test.go` | Validates recovery when multiple L0 files exist and ensures correct replay ordering and version reconstruction. |
+| `engine/tombstone_snapshot_test.go` | Ensures tombstone garbage collection respects snapshot visibility guarantees (MVCC safety). |
 
 ## Internal Tests
 
@@ -236,7 +253,7 @@ ok      vern_kv0.8/wal  0.156s
 | `sstable/block_test.go` | Tests SSTable block construction and in-block seek functionality. |
 | `sstable/compression_test.go` | Validates compression and decompression primitives. |
 | `sstable/filter_test.go` | Tests Bloom filter creation, membership checks, and SSTable integration. |
-| `sstable/full_test.go` | Validates end-to-end SSTable build and read paths (Scan, Seek). |
+| `sstable/full_test.go` | Validates end-to-end SSTable build and read paths (Scan, Seek) including prefix compression validation. |
 | `sstable/sstable_test.go` | Tests core SSTable iterator functionality. |
 
 
@@ -276,7 +293,7 @@ ok      vern_kv0.8/wal  0.156s
 
 ## Summary
 
-**Total Test Files :** 35<br>
+**Total Test Files :** 38<br>
 **Test Categories :**<br>
 - **Unit Tests** : Low-level tests for specific packages (engine, sstable, wal, etc.)
 - **Integration Tests** : Ensuring components work together (engine level).

@@ -1,10 +1,10 @@
 ## Project Tree (VERN_v0.8)
 
-Total Files : 85
-Total Code Files : 75
-Total Test Files : 38
-Total Source Files : 37
-Documentation and others : 10
+Total Files : 85<br>
+Total Code Files : 75<br>
+Total Test Files : 38<br>
+Total Source Files : 37<br>
+Documentation and others : 10<br>
 
 ```
 ├── 📁 cmd

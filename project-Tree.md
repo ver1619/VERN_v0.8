@@ -1,5 +1,10 @@
 ## Project Tree (VERN_v0.8)
 
+Total Files : 85
+Total Code Files : 75
+Total Test Files : 38
+Total Source Files : 37
+Documentation and others : 10
 
 ```
 ├── 📁 cmd
@@ -42,7 +47,7 @@
 │   ├── 📄 iterator_test.go
 │   ├── 📄 memtable_iterator.go
 │   ├── 📄 merge_iterator.go
-│   └── 📄 ersion_filter_iterator.go
+│   └── 📄 version_filter_iterator.go
 ├── 📁 manifest
 │   ├── 📄 assertions.go
 │   ├── 📄 constants.go
@@ -83,7 +88,7 @@
 │   │   └── 📄 open_put_get_test.go
 │   └── 📄 manifest_test.go
 ├── 📁 wal
-│   ├── 📄 ecord.go
+│   ├── 📄 record.go
 │   ├── 📄 record_test.go
 │   ├── 📄 segment.go
 │   ├── 📄 segment_test.go
@@ -93,7 +98,7 @@
 │   └── 📄 wal_test.go
 ├── ⚙️ .gitignore
 ├── 📝 Architecture.md
-├── 📝 cli-ui.md
+├── 📝 CLI.md
 ├── 📄 go.mod
 ├── 📄 go.sum
 ├── 📄 Invariants.md
